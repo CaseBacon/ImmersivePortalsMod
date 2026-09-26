@@ -30,11 +30,8 @@ public class IPModEntry implements ModInitializer {
         }
         
         if (FabricLoader.getInstance().isModLoaded("gravity_changer_q")) {
-            GravityChangerInterface.invoker = new GravityChangerInterface.OnGravityChangerPresent();
-            Helper.log("Gravity API is present");
-        }
-        else {
-            Helper.log("Gravity API is not present");
+            // Gravity Changer has no Minecraft 26.3 release; see GravityChangerInterface
+            Helper.err("Gravity Changer is present but its integration is not available on Minecraft 26.3");
         }
         
     }

@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.core.ducks;
 
+import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
 import net.minecraft.world.TickRateManager;
 import net.minecraft.world.level.entity.EntityTickList;
@@ -17,13 +18,11 @@ public interface IEClientWorld {
     
     void ip_setGlobalPortals(List<Portal> arg);
     
-    void ip_resetWorldRendererRef();
-    
     EntityTickList ip_getEntityList();
     
-    Map<String, MapItemSavedData> ip_getAllMapData();
+    Map<MapId, MapItemSavedData> ip_getAllMapData();
     
-    void ip_addMapData(Map<String, MapItemSavedData> map);
+    void ip_addMapData(Map<MapId, MapItemSavedData> map);
     
     BlockStatePredictionHandler ip_getBlockStatePredictionHandler();
     

@@ -45,7 +45,7 @@ public class CrossPortalViewRendering {
             RenderStates.getPartialTick()
         );
     
-        Vec3 realCameraPos = camera.getPosition();
+        Vec3 realCameraPos = camera.position();
         Vec3 isometricAdjustedOriginalCameraPos =
             TransformationManager.getIsometricAdjustedCameraPos(camera);
         

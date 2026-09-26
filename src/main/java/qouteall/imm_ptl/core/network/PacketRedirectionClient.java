@@ -3,14 +3,12 @@ package qouteall.imm_ptl.core.network;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.PacketListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketUtils;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.util.thread.BlockableEventLoop;
 import net.minecraft.world.level.Level;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.mixin.client.sync.MixinMinecraft_RedirectedPacket;
@@ -41,14 +39,19 @@ public class PacketRedirectionClient {
      * The dimension id is passed as integer,
      * because the dimension id map is only stable in client thread
      * (reading dimension id map in networking thread is not guaranteed to work).
+     * <p>
+     * Since 26.x vanilla packets are queued in {@link Minecraft#packetProcessor()} instead of
+     * the client task queue. The redirected packet is queued there too (as its wrapping payload packet),
+     * so that it is handled in order with the non-redirected packets.
      */
     public static void handleRedirectedPacket(
         int dimensionIntId,
         Packet<ClientGamePacketListener> packet,
-        ClientGamePacketListener handler
+        ClientGamePacketListener handler,
+        ClientboundCustomPayloadPacket wrapper
     ) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.isSameThread()) {
+        if (minecraft.packetProcessor().isSameThread()) {
             ResourceKey<Level> dimension = DimensionIntId.getClientMap()
                 .fromIntegerId(dimensionIntId);
             
@@ -68,16 +71,12 @@ public class PacketRedirectionClient {
             }
         }
         else {
-            minecraft.execute(() -> {
-                handleRedirectedPacket(
-                    dimensionIntId, packet, handler
-                );
-            });
+            minecraft.packetProcessor().scheduleIfPossible(handler, wrapper);
         }
     }
     
     /**
-     * For vanilla packets, in {@link PacketUtils#ensureRunningOnSameThread(Packet, PacketListener, BlockableEventLoop)}
+     * For vanilla packets, in {@code PacketUtils#ensureRunningOnSameThread}
      * it will resubmit the task,
      * and the task will be redirected in {@link MixinMinecraft_RedirectedPacket},
      * except for the bundle packet {@link net.minecraft.client.multiplayer.ClientPacketListener#handleBundlePacket(ClientboundBundlePacket)}.

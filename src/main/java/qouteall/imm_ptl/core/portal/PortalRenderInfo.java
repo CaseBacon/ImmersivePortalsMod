@@ -3,17 +3,12 @@ package qouteall.imm_ptl.core.portal;
 import com.mojang.logging.LogUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.client.Minecraft;
-import net.minecraft.util.profiling.ProfilerFiller;
 import org.apache.commons.lang3.Validate;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import qouteall.imm_ptl.core.IPGlobal;
-import qouteall.imm_ptl.core.render.GlQueryObject;
-import qouteall.imm_ptl.core.render.QueryManager;
 import qouteall.imm_ptl.core.render.context_management.RenderStates;
-import qouteall.imm_ptl.core.render.context_management.WorldRenderInfo;
 import qouteall.q_misc_util.Helper;
 
 import java.lang.ref.Cleaner;
@@ -30,42 +25,23 @@ public class PortalRenderInfo implements AutoCloseable {
     
     private static final Logger LOGGER = LogUtils.getLogger();
     
+    // 26.3 port: the OpenGL occlusion queries (GlQueryObject) were removed together with the
+    // raw-GL renderer. Visibility prediction will be rebuilt on renderpearl GpuQueryPool
+    // (or CPU visibility) in the renderer phase; see docs/26.3-port-progress.md.
     public static class Visibility {
-        public GlQueryObject lastFrameQuery;
-        public GlQueryObject thisFrameQuery;
         public Boolean lastFrameRendered;
         public Boolean thisFrameRendered;
         
         public Visibility() {
-            lastFrameQuery = null;
-            thisFrameQuery = null;
             lastFrameRendered = null;
         }
         
         void update() {
-            if (lastFrameQuery != null) {
-                GlQueryObject.returnQueryObject(lastFrameQuery);
-            }
-            lastFrameQuery = thisFrameQuery;
-            thisFrameQuery = null;
             lastFrameRendered = thisFrameRendered;
             thisFrameRendered = null;
         }
         
         void dispose() {
-            if (lastFrameQuery != null) {
-                GlQueryObject.returnQueryObject(lastFrameQuery);
-            }
-            if (thisFrameQuery != null) {
-                GlQueryObject.returnQueryObject(thisFrameQuery);
-            }
-        }
-        
-        GlQueryObject acquireThisFrameQuery() {
-            if (thisFrameQuery == null) {
-                thisFrameQuery = GlQueryObject.acquireQueryObject();
-            }
-            return thisFrameQuery;
         }
     }
     
@@ -158,8 +134,8 @@ public class PortalRenderInfo implements AutoCloseable {
                 infoMap.entrySet().removeIf(entry -> {
                     Visibility visibility = entry.getValue();
                     
-                    return visibility.lastFrameQuery == null &&
-                        visibility.thisFrameQuery == null;
+                    return visibility.lastFrameRendered == null &&
+                        visibility.thisFrameRendered == null;
                 });
                 
                 infoMap.values().forEach(Visibility::update);
@@ -209,51 +185,11 @@ public class PortalRenderInfo implements AutoCloseable {
         }
     }
     
+    /**
+     * Without occlusion queries every portal that passes frustum culling is treated as visible.
+     */
     public static boolean renderAndDecideVisibility(Portal portal, Runnable queryRendering) {
-        ProfilerFiller profiler = Minecraft.getInstance().getProfiler();
-        
-        boolean decision;
-        if (IPGlobal.offsetOcclusionQuery) {
-            PortalRenderInfo renderInfo = get(portal);
-            
-            List<UUID> renderingDescription = WorldRenderInfo.getRenderingDescription();
-            
-            Visibility visibility = renderInfo.getVisibility(renderingDescription);
-            
-            GlQueryObject lastFrameQuery = visibility.lastFrameQuery;
-            GlQueryObject thisFrameQuery = visibility.acquireThisFrameQuery();
-            
-            thisFrameQuery.performQueryAnySamplePassed(queryRendering);
-            
-            boolean noPredict =
-                renderInfo.isFrequentlyMispredicted() ||
-                    QueryManager.queryStallCounter <= 3;
-            
-            if (lastFrameQuery != null) {
-                boolean lastFrameVisible = lastFrameQuery.fetchQueryResult();
-                
-                if (!lastFrameVisible && noPredict) {
-                    profiler.push("fetch_this_frame");
-                    decision = thisFrameQuery.fetchQueryResult();
-                    profiler.pop();
-                    QueryManager.queryStallCounter++;
-                }
-                else {
-                    decision = lastFrameVisible;
-                    renderInfo.updatePredictionStatus(visibility, decision);
-                }
-            }
-            else {
-                profiler.push("fetch_this_frame");
-                decision = thisFrameQuery.fetchQueryResult();
-                profiler.pop();
-                QueryManager.queryStallCounter++;
-            }
-        }
-        else {
-            decision = QueryManager.renderAndGetDoesAnySamplePass(queryRendering);
-        }
-        return decision;
+        return true;
     }
     
     private static final Cleaner CLEANER = Cleaner.create();

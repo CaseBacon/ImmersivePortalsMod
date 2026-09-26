@@ -20,7 +20,7 @@ public class MixinWorldDimensions {
     private static void onIsVanillaLike(
         ResourceKey<LevelStem> resourceKey, LevelStem levelStem, CallbackInfoReturnable<Boolean> cir
     ) {
-        String namespace = resourceKey.location().getNamespace();
+        String namespace = resourceKey.identifier().getNamespace();
         if (DimensionImpl.STABLE_NAMESPACES.contains(namespace)) {
             cir.setReturnValue(true);
         }
@@ -31,8 +31,7 @@ public class MixinWorldDimensions {
         method = "bake",
         at = @At(
             value = "INVOKE",
-            target = "Lcom/mojang/serialization/Lifecycle;experimental()Lcom/mojang/serialization/Lifecycle;",
-            remap = false
+            target = "Lcom/mojang/serialization/Lifecycle;experimental()Lcom/mojang/serialization/Lifecycle;"
         )
     )
     private Lifecycle redirectLifecycle() {

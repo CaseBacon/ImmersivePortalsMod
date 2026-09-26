@@ -17,15 +17,17 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.apache.commons.lang3.Validate;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
+import qouteall.imm_ptl.core.teleportation.ClientTeleportationManager;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.McHelper;
@@ -47,7 +49,7 @@ public class ImmPtlNetworking {
     ) implements CustomPacketPayload {
         public static final CustomPacketPayload.Type<TeleportPacket> TYPE =
             new CustomPacketPayload.Type<>(
-                ResourceLocation.fromNamespaceAndPath("imm_ptl", "teleport")
+                Identifier.fromNamespaceAndPath("imm_ptl", "teleport")
             );
         
         public static final StreamCodec<FriendlyByteBuf, TeleportPacket> CODEC = StreamCodec.of(
@@ -75,13 +77,40 @@ public class ImmPtlNetworking {
         
         public void handle(ServerPlayer player) {
             ResourceKey<Level> dim = PortalAPI.serverIntToDimKey(
-                player.server, dimensionId
+                player.level().getServer(), dimensionId
             );
             
-            ServerTeleportationManager.of(player.server).onPlayerTeleportedInClient(
+            ServerTeleportationManager.of(player.level().getServer()).onPlayerTeleportedInClient(
                 player, dim, eyePosBeforeTeleportation, portalId
             );
         }
+        
+        @Override
+        public @NotNull Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+    
+    /**
+     * Server to client. Sent immediately before every {@link net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket}
+     * on the same connection, so the client knows which dimension the teleport target belongs to.
+     * Since 1.21.2 the position packet is a record with a fixed codec,
+     * so the dimension can no longer be appended to the vanilla packet.
+     */
+    public static record PlayerPositionDimensionPacket(
+        int teleportId, ResourceKey<Level> dimension
+    ) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<PlayerPositionDimensionPacket> TYPE =
+            new CustomPacketPayload.Type<>(
+                Identifier.fromNamespaceAndPath("imm_ptl", "player_position_dimension")
+            );
+        
+        public static final StreamCodec<FriendlyByteBuf, PlayerPositionDimensionPacket> CODEC =
+            StreamCodec.composite(
+                ByteBufCodecs.VAR_INT, PlayerPositionDimensionPacket::teleportId,
+                ResourceKey.streamCodec(Registries.DIMENSION), PlayerPositionDimensionPacket::dimension,
+                PlayerPositionDimensionPacket::new
+            );
         
         @Override
         public @NotNull Type<? extends CustomPacketPayload> type() {
@@ -203,7 +232,7 @@ public class ImmPtlNetworking {
             }
             else {
                 // spawn new portal
-                Entity entity = entityType.create(world);
+                Entity entity = entityType.create(world, EntitySpawnReason.LOAD);
                 Validate.notNull(entity, "Entity type is null");
                 
                 if (!(entity instanceof Portal portal)) {
@@ -214,7 +243,7 @@ public class ImmPtlNetworking {
                 entity.setId(id);
                 entity.setUUID(uuid);
                 entity.syncPacketPositionCodec(x, y, z);
-                entity.moveTo(x, y, z);
+                entity.snapTo(x, y, z);
                 
                 portal.readPortalDataFromNbt(extraData);
                 
@@ -236,15 +265,19 @@ public class ImmPtlNetworking {
     }
     
     public static void init() {
-        PayloadTypeRegistry.playC2S().register(
+        PayloadTypeRegistry.serverboundPlay().register(
             TeleportPacket.TYPE, TeleportPacket.CODEC
         );
         
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
             GlobalPortalSyncPacket.TYPE, GlobalPortalSyncPacket.CODEC
         );
         
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
+            PlayerPositionDimensionPacket.TYPE, PlayerPositionDimensionPacket.CODEC
+        );
+        
+        PayloadTypeRegistry.clientboundPlay().register(
             PortalSyncPacket.TYPE, PortalSyncPacket.CODEC
         );
         
@@ -255,6 +288,13 @@ public class ImmPtlNetworking {
     }
     
     public static void initClient() {
+        ClientPlayNetworking.registerGlobalReceiver(
+            PlayerPositionDimensionPacket.TYPE,
+            (packet, c) -> ClientTeleportationManager.onPositionPacketDimension(
+                packet.teleportId(), packet.dimension()
+            )
+        );
+
         ClientPlayNetworking.registerGlobalReceiver(
             GlobalPortalSyncPacket.TYPE,
             (packet, c) -> packet.handle()

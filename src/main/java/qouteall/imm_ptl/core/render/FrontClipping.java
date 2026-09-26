@@ -149,7 +149,7 @@ public class FrontClipping {
         
         Vec3 planeNormal = outerClipping.normal();
         
-        Vec3 cameraPos = client.gameRenderer.getMainCamera().getPosition();
+        Vec3 cameraPos = client.gameRenderer.mainCamera().position();
         
         Vec3 portalPos = outerClipping.pos()
             .subtract(cameraPos);

@@ -1,6 +1,7 @@
 package qouteall.imm_ptl.core.mixin.common;
 
 import net.minecraft.server.level.DistanceManager;
+import net.minecraft.world.level.TicketStorage;
 import net.minecraft.server.level.ServerChunkCache;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,8 +14,17 @@ public abstract class MixinServerChunkCache implements IEServerChunkCache {
     @Final
     private DistanceManager distanceManager;
     
+    @Shadow
+    @Final
+    private TicketStorage ticketStorage;
+    
     @Override
     public DistanceManager ip_getDistanceManager() {
         return distanceManager;
+    }
+    
+    @Override
+    public TicketStorage ip_getTicketStorage() {
+        return ticketStorage;
     }
 }

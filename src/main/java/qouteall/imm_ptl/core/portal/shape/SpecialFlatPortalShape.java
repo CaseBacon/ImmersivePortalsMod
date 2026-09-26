@@ -11,7 +11,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.animation.UnilateralPortalState;
-import qouteall.imm_ptl.core.render.ViewAreaRenderer;
 import qouteall.q_misc_util.my_util.BoxPredicateF;
 import qouteall.q_misc_util.my_util.Mesh2D;
 import qouteall.q_misc_util.my_util.Plane;
@@ -45,7 +44,7 @@ public final class SpecialFlatPortalShape implements PortalShape {
     }
     
     private static @Nullable SpecialFlatPortalShape deserialize(CompoundTag tag) {
-        Mesh2D m = Mesh2D.fromTag(tag.getCompound("shape"));
+        Mesh2D m = Mesh2D.fromTag(tag.getCompoundOrEmpty("shape"));
         if (m == null) {
             return null;
         }
@@ -178,7 +177,7 @@ public final class SpecialFlatPortalShape implements PortalShape {
                 double p2x = mesh.getPointX(p2Index);
                 double p2y = mesh.getPointY(p2Index);
                 
-                ViewAreaRenderer.outputTriangle(
+                PortalShapeMesh.outputTriangle(
                     vertexOutput, portalOriginRelativeToCamera,
                     localXAxis, localYAxis, p0x, p0y, p1x, p1y, p2x, p2y
                 );

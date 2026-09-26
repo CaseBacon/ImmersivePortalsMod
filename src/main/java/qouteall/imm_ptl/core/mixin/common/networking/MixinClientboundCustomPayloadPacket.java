@@ -29,7 +29,9 @@ public class MixinClientboundCustomPayloadPacket implements IECustomPayloadPacke
     private void onHandle(ClientCommonPacketListener clientCommonPacketListener, CallbackInfo ci) {
         if (payload instanceof PacketRedirection.Payload redirectPayload) {
             if (clientCommonPacketListener instanceof ClientGamePacketListener clientGamePacketListener) {
-                redirectPayload.handle(clientGamePacketListener);
+                redirectPayload.handle(
+                    clientGamePacketListener, (ClientboundCustomPayloadPacket) (Object) this
+                );
             }
             
             ci.cancel();

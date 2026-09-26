@@ -14,7 +14,6 @@ import qouteall.imm_ptl.core.collision.PortalCollisionHandler;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.animation.UnilateralPortalState;
 import qouteall.imm_ptl.core.render.FrustumCuller;
-import qouteall.imm_ptl.core.render.ViewAreaRenderer;
 import qouteall.q_misc_util.Helper;
 import qouteall.q_misc_util.my_util.BoxPredicateF;
 import qouteall.q_misc_util.my_util.Plane;
@@ -152,7 +151,7 @@ public final class RectangularPortalShape implements PortalShape {
         Vec3 localXAxis = portalState.getAxisW().scale(w / 2);
         Vec3 localYAxis = portalState.getAxisH().scale(h / 2);
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput, portalOriginRelativeToCamera, localXAxis, localYAxis
         );
     }

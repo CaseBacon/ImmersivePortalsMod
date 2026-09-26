@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.EventFactory;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -41,7 +41,7 @@ public class DimensionAPI {
      * Inside this event, you can:
      * - use {@link MinecraftServer#registryAccess()} and {@link RegistryAccess#registryOrThrow(ResourceKey)} to access registries (including dimension type registry)
      * - use {@link MinecraftServer#getWorldData()} {@link WorldData#worldGenOptions()} to access world information like seed.
-     * - use {@link DimensionAPI#addDimension(MinecraftServer, ResourceLocation, LevelStem)} to add dimension.
+     * - use {@link DimensionAPI#addDimension(MinecraftServer, Identifier, LevelStem)} to add dimension.
      */
     public static final Event<ServerDimensionsLoadCallback> SERVER_DIMENSIONS_LOAD_EVENT =
         EventFactory.createArrayBacked(
@@ -66,7 +66,7 @@ public class DimensionAPI {
      */
     public static void addDimension(
         MinecraftServer server,
-        ResourceLocation dimensionId,
+        Identifier dimensionId,
         LevelStem levelStem
     ) {
         if (((IMinecraftServer) server).dimlib_getIsFinishedCreatingWorlds()) {
@@ -89,19 +89,19 @@ public class DimensionAPI {
      * This can be used when the server worlds are not yet initialized.
      */
     public static boolean dimensionExistsInRegistry(
-        MinecraftServer server, ResourceLocation dimensionId
+        MinecraftServer server, Identifier dimensionId
     ) {
         // if the server is not yet running, getLevel() doesn't work
         return DimensionImpl.getDimensionRegistry(server).containsKey(dimensionId);
     }
     
     /**
-     * Similar to {@link DimensionAPI#addDimension(MinecraftServer, ResourceLocation, LevelStem)},
+     * Similar to {@link DimensionAPI#addDimension(MinecraftServer, Identifier, LevelStem)},
      * but will not add the dimension if it already exists.
      */
     public static void addDimensionIfNotExists(
         MinecraftServer server,
-        ResourceLocation dimensionId,
+        Identifier dimensionId,
         Supplier<LevelStem> levelStem
     ) {
         if (dimensionExistsInRegistry(server, dimensionId)) {
@@ -118,7 +118,7 @@ public class DimensionAPI {
      */
     public static void addDimensionDynamically(
         MinecraftServer server,
-        ResourceLocation dimensionId,
+        Identifier dimensionId,
         LevelStem levelStem
     ) {
         Validate.isTrue(server.isRunning(), "The server is not running");

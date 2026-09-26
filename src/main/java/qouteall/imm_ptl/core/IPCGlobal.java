@@ -4,20 +4,16 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.event.Event;
 import qouteall.imm_ptl.core.render.renderer.PortalRenderer;
-import qouteall.imm_ptl.core.render.renderer.RendererDebug;
 import qouteall.imm_ptl.core.render.renderer.RendererDummy;
-import qouteall.imm_ptl.core.render.renderer.RendererUsingFrameBuffer;
-import qouteall.imm_ptl.core.render.renderer.RendererUsingStencil;
 import qouteall.q_misc_util.Helper;
 
 @Environment(EnvType.CLIENT)
 public class IPCGlobal {
     
-    public static PortalRenderer renderer;
-    public static RendererUsingStencil rendererUsingStencil;
-    public static RendererUsingFrameBuffer rendererUsingFrameBuffer;
+    // PORT(26.3): the stencil, framebuffer and debug renderers are quarantined until the
+    // renderer is rebuilt on the 26.3 GPU abstraction. Only the dummy renderer exists.
     public static RendererDummy rendererDummy = new RendererDummy();
-    public static RendererDebug rendererDebug = new RendererDebug();
+    public static PortalRenderer renderer = rendererDummy;
     
     public static int maxIdleChunkRendererNum = 500;
     

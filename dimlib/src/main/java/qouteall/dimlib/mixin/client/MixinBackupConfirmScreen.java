@@ -42,7 +42,10 @@ public class MixinBackupConfirmScreen extends Screen {
      * {@link WorldOpenFlows#askForBackup}
      */
     @SuppressWarnings("JavadocReference")
-    @Inject(method = "<init>", at = @At("RETURN"))
+    @Inject(
+        method = "<init>(Ljava/lang/Runnable;Lnet/minecraft/client/gui/screens/BackupConfirmScreen$Listener;Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/Component;Z)V",
+        at = @At("RETURN")
+    )
     private void onInitEnd(
         Runnable runnable, BackupConfirmScreen.Listener listener,
         Component component, Component component2, boolean bl, CallbackInfo ci

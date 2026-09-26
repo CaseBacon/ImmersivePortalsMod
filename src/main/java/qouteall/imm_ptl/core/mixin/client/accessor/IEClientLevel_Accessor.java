@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.core.mixin.client.accessor;
 
+import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,9 +13,9 @@ import java.util.Map;
 public interface IEClientLevel_Accessor {
     
     @Accessor("mapData")
-    Map<String, MapItemSavedData> ip_getMapData();
+    Map<MapId, MapItemSavedData> ip_getMapData();
     
     @Mutable
     @Accessor("mapData")
-    void ip_setMapData(Map<String, MapItemSavedData> mapData);
+    void ip_setMapData(Map<MapId, MapItemSavedData> mapData);
 }

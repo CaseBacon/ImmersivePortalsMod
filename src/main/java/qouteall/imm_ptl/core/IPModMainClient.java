@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.core;
 
+import qouteall.imm_ptl.core.network.ImmPtlRemoteCalls;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -17,18 +18,6 @@ import qouteall.imm_ptl.core.platform_specific.O_O;
 import qouteall.imm_ptl.core.portal.PortalRenderInfo;
 import qouteall.imm_ptl.core.portal.animation.ClientPortalAnimationManagement;
 import qouteall.imm_ptl.core.portal.animation.StableClientTimer;
-import qouteall.imm_ptl.core.render.CrossPortalEntityRenderer;
-import qouteall.imm_ptl.core.render.ForceMainThreadRebuild;
-import qouteall.imm_ptl.core.render.GuiPortalRendering;
-import qouteall.imm_ptl.core.render.ImmPtlViewArea;
-import qouteall.imm_ptl.core.render.MyRenderHelper;
-import qouteall.imm_ptl.core.render.ShaderCodeTransformation;
-import qouteall.imm_ptl.core.render.VisibleSectionDiscovery;
-import qouteall.imm_ptl.core.render.context_management.CloudContext;
-import qouteall.imm_ptl.core.render.optimization.GLResourceCache;
-import qouteall.imm_ptl.core.render.optimization.SharedBlockMeshBuffers;
-import qouteall.imm_ptl.core.render.renderer.RendererUsingFrameBuffer;
-import qouteall.imm_ptl.core.render.renderer.RendererUsingStencil;
 import qouteall.imm_ptl.core.teleportation.ClientTeleportationManager;
 import qouteall.q_misc_util.dimension.DimensionIntId;
 import qouteall.q_misc_util.my_util.MyTaskList;
@@ -69,34 +58,23 @@ public class IPModMainClient {
     }
     
     public static void init() {
+        ImmPtlRemoteCalls.registerClientbound();
+        
         ClientWorldLoader.init();
         
         ClientTeleportationManager.init();
         
-        Minecraft.getInstance().execute(() -> {
-            ShaderCodeTransformation.init();
-            
-            MyRenderHelper.init();
-            
-            IPCGlobal.rendererUsingStencil = new RendererUsingStencil();
-            IPCGlobal.rendererUsingFrameBuffer = new RendererUsingFrameBuffer();
-            
-            IPCGlobal.renderer = IPCGlobal.rendererUsingStencil;
-        });
+        // PORT(26.3): the renderer initialisation (ShaderCodeTransformation, MyRenderHelper,
+        // the stencil/framebuffer renderers, CrossPortalEntityRenderer, GLResourceCache,
+        // CloudContext, SharedBlockMeshBuffers, VisibleSectionDiscovery, ImmPtlViewArea,
+        // GuiPortalRendering, ForceMainThreadRebuild) is quarantined until the renderer phase.
+        // IPCGlobal.renderer stays on the dummy renderer.
         
         DubiousThings.init();
-        
-        CrossPortalEntityRenderer.init();
-        
-        GLResourceCache.init();
         
         CollisionHelper.initClient();
         
         PortalRenderInfo.init();
-        
-        CloudContext.init();
-        
-        SharedBlockMeshBuffers.init();
         
         GcMonitor.initClient();
         
@@ -114,18 +92,10 @@ public class IPModMainClient {
         
         ClientPortalAnimationManagement.init();
         
-        VisibleSectionDiscovery.init();
-        
-        ImmPtlViewArea.init();
-        
         IPFlywheelCompat.init();
-    
-        GuiPortalRendering._init();
         
         ImmPtlNetworking.initClient();
         ImmPtlNetworkConfig.initClient();
-        
-        ForceMainThreadRebuild.init();
         
         IPCGlobal.CLIENT_CLEANUP_EVENT.register(() -> {
             IPGlobal.CLIENT_TASK_LIST.forceClearTasks();

@@ -43,6 +43,7 @@ allprojects {
         tasks.withType(JavaCompile).configureEach {
             it.options.release = 25
             it.options.encoding = 'UTF-8'
+            it.options.compilerArgs += ['-Xmaxerrs', '5000']
         }
     }
 }
@@ -71,15 +72,43 @@ def portQuarantine = [
     'qouteall/imm_ptl/core/compat/mixin/**',
     'qouteall/imm_ptl/core/compat/iris_compatibility/**',
     'qouteall/imm_ptl/core/compat/sodium_compatibility/**',
+    // client rendering: redesigned for the 26.3 renderer in phases 5-6
+    'qouteall/imm_ptl/core/render/**',
+    'qouteall/imm_ptl/core/mixin/client/render/**',
+    // GUI portal example: depends on GuiPortalRendering (restored with the renderer)
+    'qouteall/imm_ptl/core/api/example/ExampleGuiPortalRendering.java',
+    // per-dimension fog context swapping: part of FogRendererContext (restored with the renderer)
+    'qouteall/imm_ptl/core/mixin/client/multiworld_awareness/MixinFogRenderer.java',
+    // ducks implemented only by quarantined render mixins
+    'qouteall/imm_ptl/core/ducks/IEGameRenderer.java',
+    'qouteall/imm_ptl/core/ducks/IEShader.java',
+    'qouteall/imm_ptl/core/ducks/IEWorldRenderer.java',
+    // alternate dimension generators: worldgen was reworked in 26.3 (restored in phase 7)
+    'qouteall/imm_ptl/peripheral/alternate_dimension/**',
+    'qouteall/imm_ptl/peripheral/mixin/common/alternate_dimension/**',
+    'qouteall/imm_ptl/peripheral/mixin/client/alternate_dimension/**',
 ]
 // files inside quarantined directories that are already ported
 def portQuarantineKeep = [
     'qouteall/imm_ptl/core/compat/iris_compatibility/IrisInterface.java',
     'qouteall/imm_ptl/core/compat/sodium_compatibility/SodiumInterface.java',
+    // render state and math classes (no GPU calls) are ported first
+    'qouteall/imm_ptl/core/render/context_management/RenderStates.java',
+    'qouteall/imm_ptl/core/render/context_management/PortalRendering.java',
+    'qouteall/imm_ptl/core/render/context_management/WorldRenderInfo.java',
+    'qouteall/imm_ptl/core/render/context_management/StaticFieldsSwappingManager.java',
+    'qouteall/imm_ptl/core/render/TransformationManager.java',
+    'qouteall/imm_ptl/core/render/FrustumCuller.java',
+    'qouteall/imm_ptl/core/render/renderer/PortalRenderer.java',
+    'qouteall/imm_ptl/core/render/renderer/RendererDummy.java',
 ]
 def portQuarantineMatchers = portQuarantine.collect {
     java.nio.file.FileSystems.getDefault().getPathMatcher("glob:" + it)
 }
+
+// minimal stand-ins for quarantined classes that the rest of the code still references;
+// each stub file is deleted when the real class is restored
+sourceSets.main.java.srcDir 'src/portstub/java'
 
 sourceSets.main.java.exclude { FileTreeElement e ->
     if (e.directory) return false

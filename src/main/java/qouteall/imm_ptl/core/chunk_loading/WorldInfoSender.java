@@ -1,12 +1,11 @@
 package qouteall.imm_ptl.core.chunk_loading;
 
+import net.minecraft.util.profiling.Profiler;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.Level;
 import org.apache.commons.lang3.Validate;
 import qouteall.imm_ptl.core.McHelper;
@@ -17,7 +16,7 @@ import java.util.Set;
 public class WorldInfoSender {
     public static void init() {
         ServerTickEvents.END_SERVER_TICK.register((server) -> {
-            server.getProfiler().push("portal_send_world_info");
+            Profiler.get().push("portal_send_world_info");
             if (McHelper.getServerGameTime() % 100 == 42) {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     Set<ResourceKey<Level>> visibleDimensions = ImmPtlChunkTracking.getVisibleDimensions(player);
@@ -39,25 +38,16 @@ public class WorldInfoSender {
                     
                 }
             }
-            server.getProfiler().pop();
+            Profiler.get().pop();
         });
     }
     
-    //send the daytime and weather info to player when player is in nether
+    // send the weather info of a remote dimension to the player
     public static void sendWorldInfo(ServerPlayer player, ServerLevel world) {
         ResourceKey<Level> remoteDimension = world.dimension();
         
-        PacketRedirection.sendRedirectedMessage(
-            player,
-            remoteDimension,
-            new ClientboundSetTimePacket(
-                world.getGameTime(),
-                world.getDayTime(),
-                world.getGameRules().getBoolean(
-                    GameRules.RULE_DAYLIGHT
-                )
-            )
-        );
+        // Since 26.1 time is driven by the server-wide world clocks (ServerClockManager),
+        // which vanilla already synchronizes to every client, so no per-dimension time packet is sent.
         
         /**{@link net.minecraft.client.network.ClientPlayNetworkHandler#onGameStateChange(GameStateChangeS2CPacket)}*/
         

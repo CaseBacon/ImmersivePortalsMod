@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.peripheral.wand;
 
+import qouteall.imm_ptl.core.mc_utils.WireBuffers;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.logging.LogUtils;
@@ -8,8 +9,6 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
@@ -219,7 +218,7 @@ public class ClientPortalWandPortalCreation {
     
     public static void render(
         PoseStack matrixStack,
-        MultiBufferSource.BufferSource bufferSource,
+        WireBuffers bufferSource,
         double camX, double camY, double camZ
     ) {
         LocalPlayer player = Minecraft.getInstance().player;
@@ -230,7 +229,7 @@ public class ClientPortalWandPortalCreation {
         
         ResourceKey<Level> currDim = player.level().dimension();
         
-        VertexConsumer vertexConsumer = bufferSource.getBuffer(RenderType.lines());
+        VertexConsumer vertexConsumer = bufferSource.lines();
         Vec3 cameraPos = new Vec3(camX, camY, camZ);
         
         WithDim<Circle> circle = protoPortal.getCursorConstraintCircle();
@@ -315,7 +314,7 @@ public class ClientPortalWandPortalCreation {
             }
         }
         
-        VertexConsumer debugLineStripConsumer = bufferSource.getBuffer(RenderType.debugLineStrip(1));
+        VertexConsumer debugLineStripConsumer = bufferSource.lineStrip();
         
         // render the circle
         WithDim<Circle> renderedCircle = circle != null ?

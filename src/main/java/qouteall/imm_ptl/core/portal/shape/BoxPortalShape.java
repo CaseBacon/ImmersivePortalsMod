@@ -14,7 +14,6 @@ import qouteall.imm_ptl.core.collision.CollisionHelper;
 import qouteall.imm_ptl.core.collision.PortalCollisionHandler;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.animation.UnilateralPortalState;
-import qouteall.imm_ptl.core.render.ViewAreaRenderer;
 import qouteall.q_misc_util.Helper;
 import qouteall.q_misc_util.my_util.BoxPredicateF;
 import qouteall.q_misc_util.my_util.IntBox;
@@ -40,7 +39,7 @@ public final class BoxPortalShape implements PortalShape {
     }
     
     private static BoxPortalShape deserialize(CompoundTag tag) {
-        boolean facingOutwards1 = tag.getBoolean("facingOutwards");
+        boolean facingOutwards1 = tag.getBooleanOr("facingOutwards", false);
         if (facingOutwards1) {
             return FACING_OUTWARDS;
         }
@@ -196,42 +195,42 @@ public final class BoxPortalShape implements PortalShape {
         Vec3 localHY = portalState.getAxisH().scale(portalState.height() / 2);
         Vec3 localHZ = portalState.getNormal().scale(portalState.thickness() / 2);
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.add(localHX),
             facingOutwards ? localHY : localHZ,
             facingOutwards ? localHZ : localHY
         );
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.subtract(localHX),
             facingOutwards ? localHZ : localHY,
             facingOutwards ? localHY : localHZ
         );
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.add(localHY),
             facingOutwards ? localHZ : localHX,
             facingOutwards ? localHX : localHZ
         );
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.subtract(localHY),
             facingOutwards ? localHX : localHZ,
             facingOutwards ? localHZ : localHX
         );
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.add(localHZ),
             facingOutwards ? localHX : localHY,
             facingOutwards ? localHY : localHX
         );
         
-        ViewAreaRenderer.outputFullQuad(
+        PortalShapeMesh.outputFullQuad(
             vertexOutput,
             portalOriginRelativeToCamera.subtract(localHZ),
             facingOutwards ? localHY : localHX,

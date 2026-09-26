@@ -1,20 +1,22 @@
 package qouteall.imm_ptl.core.chunk_loading;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.core.SectionPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
@@ -56,6 +58,20 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     
     public static final SignalArged<LevelChunk> clientChunkLoadSignal = new SignalArged<>();
     public static final SignalArged<LevelChunk> clientChunkUnloadSignal = new SignalArged<>();
+
+    /**
+     * Since 26.x the level extractor takes the added/removed chunks and empty sections from
+     * the chunk cache every frame ({@link #flipUpdateTrackingSets()}), and the section occlusion
+     * graph only knows about chunks reported there.
+     * The vanilla tracking sets live in the (unused) vanilla storage, so this class keeps its own.
+     * Double buffered like vanilla: one set is filled while the other one is being rendered.
+     * Only accessed on the main thread.
+     */
+    private final LongOpenHashSet[] addedEmptySectionsSets = {new LongOpenHashSet(), new LongOpenHashSet()};
+    private final LongOpenHashSet[] removedEmptySectionsSets = {new LongOpenHashSet(), new LongOpenHashSet()};
+    private final LongOpenHashSet[] addedLoadedChunksSets = {new LongOpenHashSet(), new LongOpenHashSet()};
+    private final LongOpenHashSet[] removedLoadedChunksSets = {new LongOpenHashSet(), new LongOpenHashSet()};
+    private int updatingSetsIndex = 0;
     
     public ImmPtlClientChunkMap(ClientLevel clientWorld, int loadDistance) {
         super(clientWorld, 1);
@@ -70,15 +86,16 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
         
 //        LOGGER.info("unload {} {}", level, chunkPos);
         
-        LevelChunk chunk = chunkMapForMainThread.get(chunkPos.toLong());
+        LevelChunk chunk = chunkMapForMainThread.get(chunkPos.pack());
         if (chunk != null) {
             modifyChunkMap(chunkMap -> {
-                chunkMap.remove(chunkPos.toLong());
+                chunkMap.remove(chunkPos.pack());
             });
-            
+            onChunkRemoved(chunk);
+                        
             O_O.postClientChunkUnloadEvent(chunk);
             this.level.unload(chunk);
-            SodiumInterface.invoker.onClientChunkUnloaded(level, chunkPos.x, chunkPos.z);
+            SodiumInterface.invoker.onClientChunkUnloaded(level, chunkPos.x(), chunkPos.z());
             clientChunkUnloadSignal.emit(chunk);
         }
     }
@@ -105,7 +122,7 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     @Override
     public LevelChunk getChunk(int x, int z, ChunkStatus chunkStatus, boolean create) {
         return readChunkMap(chunkMap -> {
-            LevelChunk chunk = chunkMap.get(ChunkPos.asLong(x, z));
+            LevelChunk chunk = chunkMap.get(ChunkPos.pack(x, z));
             if (chunk != null) {
                 return chunk;
             }
@@ -116,7 +133,7 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     
     public boolean isChunkLoaded(int x, int z) {
         return readChunkMap(chunkMap -> {
-            return chunkMap.containsKey(ChunkPos.asLong(x, z));
+            return chunkMap.containsKey(ChunkPos.pack(x, z));
         });
     }
     
@@ -124,7 +141,7 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     public void replaceBiomes(int x, int z, FriendlyByteBuf friendlyByteBuf) {
         Validate.isTrue(Thread.currentThread() == mainThread);
         
-        long chunkPosLong = ChunkPos.asLong(x, z);
+        long chunkPosLong = ChunkPos.pack(x, z);
         
         LevelChunk worldChunk = chunkMapForMainThread.get(chunkPosLong);
         ChunkPos chunkPos = new ChunkPos(x, z);
@@ -139,24 +156,25 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     @Override
     public LevelChunk replaceWithPacketData(
         int x, int z,
-        FriendlyByteBuf buf, CompoundTag nbt,
-        Consumer<ClientboundLevelChunkPacketData.BlockEntityTagOutput> consumer
+        ClientboundLevelChunkPacketData chunkData
     ) {
         Validate.isTrue(Thread.currentThread() == mainThread);
-        
-        long chunkPosLong = ChunkPos.asLong(x, z);
+
+        long chunkPosLong = ChunkPos.pack(x, z);
         LevelChunk worldChunk = chunkMapForMainThread.get(chunkPosLong);
         if (worldChunk == null) {
             worldChunk = new LevelChunk(this.level, new ChunkPos(x, z));
-            loadChunkDataFromPacket(buf, nbt, worldChunk, consumer);
-            
+            loadChunkDataFromPacket(x, z, chunkData, worldChunk);
+
             LevelChunk worldChunkToPut = worldChunk; // lambda can only capture effectively final variables
             modifyChunkMap(chunkMap -> {
                 chunkMap.put(chunkPosLong, worldChunkToPut);
             });
+            onChunkAdded(worldChunk);
         }
         else {
-            loadChunkDataFromPacket(buf, nbt, worldChunk, consumer);
+            loadChunkDataFromPacket(x, z, chunkData, worldChunk);
+            refreshEmptySections(worldChunk);
         }
         
         this.level.onChunkLoaded(new ChunkPos(x, z));
@@ -174,26 +192,25 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
      * {@link net.minecraft.world.level.chunk.LinearPalette#read(FriendlyByteBuf)}
      */
     private void loadChunkDataFromPacket(
-        FriendlyByteBuf buf,
-        CompoundTag nbt,
-        LevelChunk worldChunk,
-        Consumer<ClientboundLevelChunkPacketData.BlockEntityTagOutput> consumer
+        int x, int z,
+        ClientboundLevelChunkPacketData chunkData,
+        LevelChunk worldChunk
     ) {
         try {
-            worldChunk.replaceWithPacketData(buf, nbt, consumer);
+            worldChunk.replaceWithPacketData(x, z, chunkData);
         }
         catch (Exception e) {
             LOGGER.error(
                 "Error deserializing chunk packet {} {}",
-                worldChunk.getLevel().dimension().location(),
+                worldChunk.getLevel().dimension().identifier(),
                 worldChunk.getPos(),
                 e
             );
             CHelper.printChat(
                 Component
                     .literal("Failed to deserialize chunk packet. %s %s %s".formatted(
-                        worldChunk.getLevel().dimension().location(),
-                        worldChunk.getPos().x, worldChunk.getPos().z
+                        worldChunk.getLevel().dimension().identifier(),
+                        worldChunk.getPos().x(), worldChunk.getPos().z()
                     ))
                     .append(Component.literal(" Report issue:"))
                     .append(McHelper.getLinkText(O_O.getIssueLink()))
@@ -234,8 +251,108 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     
     @Override
     public void onLightUpdate(LightLayer lightType, SectionPos chunkSectionPos) {
-        ClientWorldLoader.getWorldRenderer(level.dimension())
-            .setSectionDirty(chunkSectionPos.x(), chunkSectionPos.y(), chunkSectionPos.z());
+        // mark the section dirty in the extractor of this dimension (not necessarily the current one)
+        LevelExtractor extractor = ClientWorldLoader.EXTRACTOR_MAP.get(level.dimension());
+        if (extractor != null) {
+            extractor.setSectionDirty(chunkSectionPos.x(), chunkSectionPos.y(), chunkSectionPos.z());
+        }
+    }
+
+    @Override
+    public LongOpenHashSet addedEmptySections() {
+        return addedEmptySectionsSets[updatingSetsIndex];
+    }
+
+    @Override
+    public LongOpenHashSet removedEmptySections() {
+        return removedEmptySectionsSets[updatingSetsIndex];
+    }
+
+    @Override
+    public LongOpenHashSet addedLoadedChunks() {
+        return addedLoadedChunksSets[updatingSetsIndex];
+    }
+
+    @Override
+    public LongOpenHashSet removedLoadedChunks() {
+        return removedLoadedChunksSets[updatingSetsIndex];
+    }
+
+    @IPVanillaCopy
+    @Override
+    public void flipUpdateTrackingSets() {
+        updatingSetsIndex = (updatingSetsIndex + 1) % 2;
+        addedEmptySectionsSets[updatingSetsIndex].clear();
+        removedEmptySectionsSets[updatingSetsIndex].clear();
+        addedLoadedChunksSets[updatingSetsIndex].clear();
+        removedLoadedChunksSets[updatingSetsIndex].clear();
+    }
+
+    @Override
+    public void onSectionEmptinessChanged(int sectionX, int sectionY, int sectionZ, boolean empty) {
+        // vanilla limits this to the storage range; this map has no range,
+        // so only track sections of loaded chunks (newly added chunks are handled in onChunkAdded)
+        if (Thread.currentThread() != mainThread || !isChunkLoaded(sectionX, sectionZ)) {
+            return;
+        }
+        long sectionNode = SectionPos.asLong(sectionX, sectionY, sectionZ);
+        if (empty) {
+            markSectionEmpty(sectionNode);
+        }
+        else {
+            markSectionNotEmpty(sectionNode);
+        }
+    }
+
+    @IPVanillaCopy
+    private void onChunkRemoved(LevelChunk chunk) {
+        ChunkPos chunkPos = chunk.getPos();
+        long chunkNode = chunkPos.pack();
+        addedLoadedChunksSets[updatingSetsIndex].remove(chunkNode);
+        removedLoadedChunksSets[updatingSetsIndex].add(chunkNode);
+        LevelChunkSection[] sections = chunk.getSections();
+        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            markSectionEmpty(SectionPos.asLong(
+                chunkPos.x(), chunk.getSectionYFromSectionIndex(sectionIndex), chunkPos.z()
+            ));
+        }
+    }
+
+    @IPVanillaCopy
+    private void onChunkAdded(LevelChunk chunk) {
+        ChunkPos chunkPos = chunk.getPos();
+        long chunkNode = chunkPos.pack();
+        removedLoadedChunksSets[updatingSetsIndex].remove(chunkNode);
+        addedLoadedChunksSets[updatingSetsIndex].add(chunkNode);
+        refreshEmptySections(chunk);
+    }
+
+    @IPVanillaCopy
+    private void refreshEmptySections(LevelChunk chunk) {
+        ChunkPos chunkPos = chunk.getPos();
+        LevelChunkSection[] sections = chunk.getSections();
+        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            LevelChunkSection section = sections[sectionIndex];
+            long sectionNode = SectionPos.asLong(
+                chunkPos.x(), chunk.getSectionYFromSectionIndex(sectionIndex), chunkPos.z()
+            );
+            if (section.hasOnlyAir()) {
+                markSectionEmpty(sectionNode);
+            }
+            else {
+                markSectionNotEmpty(sectionNode);
+            }
+        }
+    }
+
+    private void markSectionEmpty(long sectionNode) {
+        removedEmptySectionsSets[updatingSetsIndex].remove(sectionNode);
+        addedEmptySectionsSets[updatingSetsIndex].add(sectionNode);
+    }
+
+    private void markSectionNotEmpty(long sectionNode) {
+        addedEmptySectionsSets[updatingSetsIndex].remove(sectionNode);
+        removedEmptySectionsSets[updatingSetsIndex].add(sectionNode);
     }
     
 }

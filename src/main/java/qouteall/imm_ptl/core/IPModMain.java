@@ -1,10 +1,11 @@
 package qouteall.imm_ptl.core;
 
+import qouteall.imm_ptl.core.network.ImmPtlRemoteCalls;
 import com.mojang.logging.LogUtils;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.GsonConfigSerializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import org.slf4j.Logger;
@@ -67,6 +68,7 @@ public class IPModMain {
         ImmPtlNetworking.init();
         ImmPtlNetworkConfig.init();
         PacketRedirection.init();
+        ImmPtlRemoteCalls.registerServerbound();
         
         IPGlobal.POST_CLIENT_TICK_EVENT.register(IPGlobal.CLIENT_TASK_LIST::processTasks);
         
@@ -152,14 +154,14 @@ public class IPModMain {
         ipConfig.onConfigChanged();
     }
     
-    public static void registerBlocks(BiConsumer<ResourceLocation, PortalPlaceholderBlock> regFunc) {
+    public static void registerBlocks(BiConsumer<Identifier, PortalPlaceholderBlock> regFunc) {
         regFunc.accept(
             McHelper.newResourceLocation("immersive_portals", "nether_portal_block"),
             PortalPlaceholderBlock.instance
         );
     }
     
-    public static void registerEntityTypes(BiConsumer<ResourceLocation, EntityType<?>> regFunc) {
+    public static void registerEntityTypes(BiConsumer<Identifier, EntityType<?>> regFunc) {
         
         regFunc.accept(
             McHelper.newResourceLocation("immersive_portals", "portal"),

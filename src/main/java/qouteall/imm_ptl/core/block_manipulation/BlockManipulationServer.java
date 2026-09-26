@@ -1,5 +1,7 @@
 package qouteall.imm_ptl.core.block_manipulation;
 
+import net.minecraft.world.item.component.SwingAnimation;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import com.mojang.logging.LogUtils;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.EventFactory;
@@ -13,7 +15,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import net.minecraft.util.Tuple;
+import qouteall.q_misc_util.my_util.Tuple;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -102,7 +104,7 @@ public class BlockManipulationServer {
         BlockHitResult blockHitResult
     ) {
         Direction side = blockHitResult.getDirection();
-        Vec3 sideVec = Vec3.atLowerCornerOf(side.getNormal());
+        Vec3 sideVec = Vec3.atLowerCornerOf(side.getUnitVec3i());
         BlockPos hitPos = blockHitResult.getBlockPos();
         Vec3 hitCenter = Vec3.atCenterOf(hitPos);
         
@@ -146,8 +148,8 @@ public class BlockManipulationServer {
             FriendlyByteBuf buf = IPMcHelper.bytesToBuf(packetBytes);
             ServerboundPlayerActionPacket packet = ServerboundPlayerActionPacket.STREAM_CODEC.decode(buf);
             
-            ServerLevel world = player.server.getLevel(dimension);
-            Validate.notNull(world, "missing %s", dimension.location());
+            ServerLevel world = player.level().getServer().getLevel(dimension);
+            Validate.notNull(world, "missing %s", dimension.identifier());
             
             withRedirect(
                 new Context(world, null),
@@ -169,11 +171,11 @@ public class BlockManipulationServer {
             FriendlyByteBuf buf = IPMcHelper.bytesToBuf(packetBytes);
             ServerboundUseItemOnPacket packet = ServerboundUseItemOnPacket.STREAM_CODEC.decode(buf);
             
-            ServerLevel world = player.server.getLevel(dimension);
-            Validate.notNull(world, "missing %s", dimension.location());
+            ServerLevel world = player.level().getServer().getLevel(dimension);
+            Validate.notNull(world, "missing %s", dimension.identifier());
             
             withRedirect(
-                new Context(world, packet.getHitResult()),
+                new Context(world, packet.hitResult()),
                 () -> {
                     doProcessUseItemOn(world, player, packet);
                 }
@@ -218,7 +220,7 @@ public class BlockManipulationServer {
         if (isAttackingAction(action)) {
             player.gameMode.handleBlockBreakAction(
                 blockPos, action, packet.getDirection(),
-                world.getMaxBuildHeight(), packet.getSequence()
+                world.getMaxY(), packet.getSequence()
             );
             player.connection.ackBlockChangesUpTo(packet.getSequence());
         }
@@ -226,6 +228,7 @@ public class BlockManipulationServer {
     
     public static boolean isAttackingAction(ServerboundPlayerActionPacket.Action action) {
         return action == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK ||
+            action == ServerboundPlayerActionPacket.Action.CHANGE_DESTROY_DIRECTION ||
             action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK ||
             action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK;
     }
@@ -237,50 +240,68 @@ public class BlockManipulationServer {
     private static void doProcessUseItemOn(
         ServerLevel world, ServerPlayer player, ServerboundUseItemOnPacket packet
     ) {
-        player.connection.ackBlockChangesUpTo(packet.getSequence());
-        InteractionHand hand = packet.getHand();
-        BlockHitResult blockHitResult = packet.getHitResult();
-        ResourceKey<Level> dimension = world.dimension();
-        
+        // re-diffed against the 26.3 handleUseItemOn; the reach check is portal-aware
+        player.connection.ackBlockChangesUpTo(packet.sequence());
+        InteractionHand hand = packet.hand();
         ItemStack itemStack = player.getItemInHand(hand);
-        
         if (!itemStack.isItemEnabled(world.enabledFeatures())) {
             return;
         }
         
+        BlockHitResult blockHitResult = packet.hitResult();
+        Vec3 location = blockHitResult.getLocation();
         BlockPos blockPos = blockHitResult.getBlockPos();
+        ResourceKey<Level> dimension = world.dimension();
+        
+        if (!canPlayerReach(dimension, player, blockPos)) {
+            LOGGER.error("Reject cross-portal action {} {} {}", player, world, blockPos);
+            return;
+        }
+        
+        Vec3 distance = location.subtract(Vec3.atCenterOf(blockPos));
+        double limit = 1.0000001;
+        if (!(Math.abs(distance.x()) < limit && Math.abs(distance.y()) < limit && Math.abs(distance.z()) < limit)) {
+            LOGGER.warn(
+                "Rejecting cross-portal UseItemOn from {}: location {} too far away from hit block {}.",
+                player, location, blockPos
+            );
+            return;
+        }
+        
         Direction direction = blockHitResult.getDirection();
         player.resetLastActionTime();
-        if (world.mayInteract(player, blockPos)) {
-            if (!canPlayerReach(dimension, player, blockPos)) {
-                LOGGER.error("Reject cross-portal action {} {} {}", player, world, blockPos);
-                return;
-            }
-            
+        int maxY = world.getMaxY();
+        int minY = world.getMinY();
+        if (blockPos.getY() > maxY || blockPos.getY() < minY) {
+            return;
+        }
+        
+        SwingAnimation swingAnimation = itemStack.getInteractAnimation();
+        if (world.getServer().isUnderSpawnProtection(world, blockPos, player)) {
+            player.sendSpawnProtectionMessage(blockPos);
+        }
+        else if (world.mayInteract(player, blockPos)) {
             InteractionResult actionResult = player.gameMode.useItemOn(
-                player,
-                world,
-                itemStack,
-                hand,
-                blockHitResult
+                player, world, itemStack, hand, blockHitResult
             );
-            if (actionResult.shouldSwing()) {
-                player.swing(hand, true);
+            if (actionResult.consumesAction()) {
+                CriteriaTriggers.ANY_BLOCK_USE.trigger(player, blockPos, itemStack);
+            }
+            if (actionResult instanceof InteractionResult.Success success && success.shouldSwing()) {
+                player.swingAndResetAttackStrength(
+                    hand, swingAnimation, success.swingSource() != InteractionResult.SwingSource.PREDICTED
+                );
             }
         }
         
         PacketRedirection.sendRedirectedMessage(
-            player,
-            dimension,
-            new ClientboundBlockUpdatePacket(world, blockPos)
+            player, dimension, new ClientboundBlockUpdatePacket(world, blockPos)
         );
         
         BlockPos offseted = blockPos.relative(direction);
-        if (offseted.getY() >= world.getMinBuildHeight() && offseted.getY() < world.getMaxBuildHeight()) {
+        if (offseted.getY() >= minY && offseted.getY() <= maxY) {
             PacketRedirection.sendRedirectedMessage(
-                player,
-                dimension,
-                new ClientboundBlockUpdatePacket(world, offseted)
+                player, dimension, new ClientboundBlockUpdatePacket(world, offseted)
             );
         }
     }

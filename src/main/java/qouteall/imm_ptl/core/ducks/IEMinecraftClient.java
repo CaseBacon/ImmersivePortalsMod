@@ -1,18 +1,13 @@
 package qouteall.imm_ptl.core.ducks;
 
-import com.mojang.blaze3d.pipeline.RenderTarget;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.RenderBuffers;
+import net.minecraft.client.renderer.extract.LevelExtractor;
 
 public interface IEMinecraftClient {
-    void ip_setFrameBuffer(RenderTarget buffer);
-    
-    Screen ip_getCurrentScreen();
-    
     void ip_setWorldRenderer(LevelRenderer r);
     
-    void ip_setRenderBuffers(RenderBuffers arg);
+    // since 26.2 the level is extracted by a LevelExtractor that owns the ClientLevel reference
+    void ip_setLevelExtractor(LevelExtractor extractor);
     
     Thread ip_getRunningThread();
 }

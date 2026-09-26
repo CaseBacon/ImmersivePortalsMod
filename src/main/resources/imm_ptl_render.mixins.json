@@ -1,0 +1,41 @@
+{
+  "required": true,
+  "package": "qouteall.imm_ptl.core.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "plugin": "qouteall.imm_ptl.core.IPMixinPlugin",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "client.render.IERenderSystem",
+    "client.render.IESectionRenderDispatcher",
+    "client.render.MixinBlockEntityRenderDispatcher",
+    "client.render.MixinCamera",
+    "client.render.MixinEntityRenderDispatcher",
+    "client.render.MixinFrustum_FixDeadLoop",
+    "client.render.MixinGameRenderer",
+    "client.render.MixinGlStateManager",
+    "client.render.MixinLevelRenderer",
+    "client.render.MixinLevelRenderer_BeforeIris",
+    "client.render.MixinLevelRenderer_ForceMainThreadRebuild",
+    "client.render.MixinLevelRenderer_Optional",
+    "client.render.MixinMultiBufferSourceBufferSource",
+    "client.render.MixinRenderSection",
+    "client.render.MixinRenderSystem_Clipping",
+    "client.render.MixinRenderSystem_Fog",
+    "client.render.MixinScreenEffectRenderer",
+    "client.render.MixinSectionRenderDispatcher",
+    "client.render.MixinShaderInstanceForIris",
+    "client.render.framebuffer.MixinMainTarget",
+    "client.render.framebuffer.MixinRenderTarget",
+    "client.render.isometric.MixinGameRenderer_Isometric",
+    "client.render.optimization.IEChunkCompileTask",
+    "client.render.optimization.MixinFrustum",
+    "client.render.optimization.MixinLevelRenderer_Clouds",
+    "client.render.optimization.MixinSectionBufferBuilderPack",
+    "client.render.shader.MixinGameRenderer_Shaders",
+    "client.render.shader.MixinProgram",
+    "client.render.shader.MixinShaderInstance"
+  ],
+  "_comment": "Quarantined for the Minecraft 26.3 port: renderer mixins, restored in the renderer phase. Not registered in fabric.mod.json."
+}

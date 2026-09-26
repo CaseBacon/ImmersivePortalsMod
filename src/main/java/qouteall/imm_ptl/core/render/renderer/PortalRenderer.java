@@ -1,11 +1,9 @@
 package qouteall.imm_ptl.core.render.renderer;
 
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.logging.LogUtils;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.EventFactory;
-import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -14,20 +12,15 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.slf4j.Logger;
 import qouteall.imm_ptl.core.CHelper;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.compat.IPModInfoChecking;
-import qouteall.imm_ptl.core.compat.iris_compatibility.ExperimentalIrisPortalRenderer;
-import qouteall.imm_ptl.core.compat.iris_compatibility.IrisCompatibilityPortalRenderer;
-import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
-import qouteall.imm_ptl.core.compat.iris_compatibility.IrisPortalRenderer;
 import qouteall.imm_ptl.core.portal.Mirror;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.global_portals.GlobalPortalStorage;
-import qouteall.imm_ptl.core.render.MyGameRenderer;
-import qouteall.imm_ptl.core.render.MyRenderHelper;
 import qouteall.imm_ptl.core.render.TransformationManager;
 import qouteall.imm_ptl.core.render.context_management.PortalRendering;
 import qouteall.imm_ptl.core.render.context_management.RenderStates;
@@ -40,6 +33,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 public abstract class PortalRenderer {
+    
+    private static final Logger LOGGER = LogUtils.getLogger();
     
     /**
      * An event for filtering whether a portal should render.
@@ -85,12 +80,14 @@ public abstract class PortalRenderer {
     
     protected List<Portal> getPortalsToRender(Matrix4f modelView) {
         Supplier<Frustum> frustumSupplier = Helper.cached(() -> {
+            // PORT(26.3): RenderSystem no longer holds the projection matrix;
+            // the extracted camera state carries it.
             Frustum frustum = new Frustum(
                 modelView,
-                RenderSystem.getProjectionMatrix()
+                new Matrix4f(client.gameRenderer.gameRenderState().levelRenderState.cameraRenderState.projectionMatrix)
             );
             
-            Vec3 cameraPos = client.gameRenderer.getMainCamera().getPosition();
+            Vec3 cameraPos = client.gameRenderer.mainCamera().position();
             frustum.prepare(cameraPos.x, cameraPos.y, cameraPos.z);
             
             return frustum;
@@ -225,11 +222,8 @@ public abstract class PortalRenderer {
         
         PortalRendering.onEndPortalWorldRendering();
         
-        GlStateManager._enableDepthTest();
-        
-        MyRenderHelper.restoreViewPort();
-        
-        
+        // PORT(26.3): the old GL depth-test/viewport restoration was removed together with
+        // direct GL state access; the frame-graph based renderer must restore its own state.
     }
     
     private static int getPortalRenderDistance(Portal portal) {
@@ -251,9 +245,10 @@ public abstract class PortalRenderer {
     public void invokeWorldRendering(
         WorldRenderInfo worldRenderInfo
     ) {
-        MyGameRenderer.renderWorldNew(
-            worldRenderInfo,
-            Runnable::run
+        // PORT(26.3): MyGameRenderer (world rendering through a portal) is quarantined until
+        // the renderer phase. Only RendererDummy is active, which never renders portal content.
+        throw new UnsupportedOperationException(
+            "Portal world rendering is not ported to Minecraft 26.3 yet"
         );
     }
     
@@ -315,7 +310,7 @@ public abstract class PortalRenderer {
             return;
         }
         
-        if (Minecraft.getInstance().options.graphicsMode().get() == GraphicsStatus.FABULOUS) {
+        if (Minecraft.getInstance().options.improvedTransparency().get()) {
             if (!fabulousWarned) {
                 fabulousWarned = true;
                 CHelper.printChat(Component.translatable("imm_ptl.fabulous_warning"));
@@ -324,39 +319,22 @@ public abstract class PortalRenderer {
         
         IPModInfoChecking.checkShaderpack();
         
-        if (IrisInterface.invoker.isIrisPresent()) {
-            if (IrisInterface.invoker.isShaders()) {
-                if (IPCGlobal.experimentalIrisPortalRenderer) {
-                    switchRenderer(ExperimentalIrisPortalRenderer.instance);
-                    return;
-                }
-                
-                switch (IPGlobal.renderMode) {
-                    case normal -> switchRenderer(IrisPortalRenderer.instance);
-                    case compatibility -> switchRenderer(IrisCompatibilityPortalRenderer.instance);
-                    case debug -> switchRenderer(IrisCompatibilityPortalRenderer.debugModeInstance);
-                    case none -> switchRenderer(IPCGlobal.rendererDummy);
-                }
-                return;
-            }
+        // PORT(26.3): the stencil, framebuffer, debug and Iris portal renderers are quarantined
+        // until they are rebuilt on the 26.3 GPU abstraction. Every render mode falls back to
+        // the dummy renderer, which does not render portal content.
+        if (!notPortedWarned && IPGlobal.renderMode != IPGlobal.RenderMode.none) {
+            notPortedWarned = true;
+            LOGGER.warn("Portal rendering is not ported to Minecraft 26.3 yet. Portals will not show their destination.");
         }
-        
-        switch (IPGlobal.renderMode) {
-            case normal -> switchRenderer(IPCGlobal.rendererUsingStencil);
-            case compatibility -> switchRenderer(IPCGlobal.rendererUsingFrameBuffer);
-            case debug -> switchRenderer(IPCGlobal.rendererDebug);
-            case none -> switchRenderer(IPCGlobal.rendererDummy);
-        }
+        switchRenderer(IPCGlobal.rendererDummy);
     }
+    
+    private static boolean notPortedWarned = false;
     
     private static void switchRenderer(PortalRenderer renderer) {
         if (IPCGlobal.renderer != renderer) {
             Helper.log("switched to renderer " + renderer.getClass());
             IPCGlobal.renderer = renderer;
-            
-            if (IrisInterface.invoker.isShaders()) {
-                IrisInterface.invoker.reloadPipelines();
-            }
         }
     }
 }

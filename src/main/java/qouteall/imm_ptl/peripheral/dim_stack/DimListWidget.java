@@ -1,7 +1,8 @@
 package qouteall.imm_ptl.peripheral.dim_stack;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
@@ -42,7 +43,9 @@ public class DimListWidget extends AbstractSelectionList<DimEntryWidget> {
     }
     
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+    public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
+        double mouseX = event.x();
+        double mouseY = event.y();
         if (type == Type.mainDimensionList && draggingCallback != null) {
             DimEntryWidget selected = getSelected();
         
@@ -63,7 +66,7 @@ public class DimListWidget extends AbstractSelectionList<DimEntryWidget> {
             }
         }
         
-        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        return super.mouseDragged(event, deltaX, deltaY);
     }
     
     @Override
@@ -78,12 +81,12 @@ public class DimListWidget extends AbstractSelectionList<DimEntryWidget> {
     }
     
     @Override
-    protected int getScrollbarPosition() {
+    protected int scrollBarX() {
         return (width - ROW_WIDTH) / 2 + ROW_WIDTH;
     }
     
     @Override
-    protected void renderListBackground(GuiGraphics guiGraphics) {
+    protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {
         // don't render background
     }
 }

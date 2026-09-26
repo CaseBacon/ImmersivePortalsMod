@@ -3,6 +3,7 @@ package qouteall.dimlib.ducks;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.world.level.storage.LevelStorageSource;
 
 import java.util.concurrent.Executor;
@@ -18,6 +19,10 @@ public interface IMinecraftServer {
     void dimlib_removeDimensionFromWorldMap(ResourceKey<Level> dimension);
     
     void dimlib_waitUntilNextTick();
+    
+    boolean dimlib_pollTask();
+    
+    WorldGenSettings dimlib_getWorldGenSettings();
     
     boolean dimlib_getCanDirectlyRegisterDimensions();
     

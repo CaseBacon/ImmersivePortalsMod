@@ -5,7 +5,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.progress.ChunkProgressListener;
+import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.util.thread.ReentrantBlockableEventLoop;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelStorageSource;
@@ -32,7 +32,7 @@ public abstract class MixinMinecraftServer
     extends ReentrantBlockableEventLoop<TickTask> implements IMinecraftServer {
     
     public MixinMinecraftServer(String name) {
-        super(name);
+        super(name, false);
         throw new RuntimeException();
     }
     
@@ -58,6 +58,10 @@ public abstract class MixinMinecraftServer
     @Shadow
     protected abstract void waitUntilNextTick();
     
+    @Shadow
+    @Final
+    private WorldGenSettings worldGenSettings;
+    
     @Unique
     private boolean ip_canDirectlyRegisterDimension = false;
     
@@ -67,10 +71,8 @@ public abstract class MixinMinecraftServer
     @Unique
     private List<Runnable> dimlib_taskList;
     
-    @Inject(method = "Lnet/minecraft/server/MinecraftServer;createLevels(Lnet/minecraft/server/level/progress/ChunkProgressListener;)V", at = @At("HEAD"))
-    private void onBeforeCreateWorlds(
-        ChunkProgressListener worldGenerationProgressListener, CallbackInfo ci
-    ) {
+    @Inject(method = "createLevels()V", at = @At("HEAD"))
+    private void onBeforeCreateWorlds(CallbackInfo ci) {
         Validate.isTrue(
             !ip_canDirectlyRegisterDimension, "invalid server initialization status"
         );
@@ -84,7 +86,7 @@ public abstract class MixinMinecraftServer
     }
     
     @Inject(
-        method = "Lnet/minecraft/server/MinecraftServer;createLevels(Lnet/minecraft/server/level/progress/ChunkProgressListener;)V",
+        method = "createLevels()V",
         at = @At("RETURN")
     )
     private void onFinishedLoadingAllWorlds(
@@ -122,6 +124,16 @@ public abstract class MixinMinecraftServer
         }
         
         this.levels = newMap;
+    }
+    
+    @Override
+    public boolean dimlib_pollTask() {
+        return pollTask();
+    }
+    
+    @Override
+    public WorldGenSettings dimlib_getWorldGenSettings() {
+        return worldGenSettings;
     }
     
     @Override

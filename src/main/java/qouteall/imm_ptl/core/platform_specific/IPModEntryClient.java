@@ -4,14 +4,10 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.renderer.entity.NoopRenderer;
 import net.minecraft.world.entity.EntityType;
-import qouteall.imm_ptl.core.CHelper;
-import qouteall.imm_ptl.core.IPGlobal;
-import qouteall.imm_ptl.core.IPMcHelper;
 import qouteall.imm_ptl.core.IPModMainClient;
 import qouteall.imm_ptl.core.compat.IPModInfoChecking;
-import qouteall.imm_ptl.core.compat.iris_compatibility.ExperimentalIrisPortalRenderer;
 import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.portal.BreakableMirror;
@@ -24,10 +20,7 @@ import qouteall.imm_ptl.core.portal.global_portals.VerticalConnectingPortal;
 import qouteall.imm_ptl.core.portal.global_portals.WorldWrappingPortal;
 import qouteall.imm_ptl.core.portal.nether_portal.GeneralBreakablePortal;
 import qouteall.imm_ptl.core.portal.nether_portal.NetherPortalEntity;
-import qouteall.imm_ptl.core.render.LoadingIndicatorRenderer;
-import qouteall.imm_ptl.core.render.PortalEntityRenderer;
 import qouteall.q_misc_util.Helper;
-import qouteall.q_misc_util.my_util.MyTaskList;
 
 import java.util.Arrays;
 
@@ -49,15 +42,19 @@ public class IPModEntryClient implements ClientModInitializer {
             VerticalConnectingPortal.ENTITY_TYPE,
             GeneralBreakablePortal.ENTITY_TYPE
         }).forEach(
+            // PORT(26.3): PortalEntityRenderer (portal content and overlay rendering) is
+            // quarantined with the renderer. A no-op renderer keeps portal entities valid for
+            // the client entity render dispatcher.
             entityType -> EntityRendererRegistry.register(
                 entityType,
-                (EntityRendererProvider) PortalEntityRenderer::new
+                (EntityRendererProvider) NoopRenderer::new
             )
         );
         
+        // PORT(26.3): LoadingIndicatorRenderer (text rendering) is quarantined with the renderer.
         EntityRendererRegistry.register(
             LoadingIndicatorEntity.entityType,
-            LoadingIndicatorRenderer::new
+            NoopRenderer::new
         );
         
     }
@@ -68,43 +65,15 @@ public class IPModEntryClient implements ClientModInitializer {
         
         initPortalRenderers();
         
-        boolean isSodiumPresent =
-            FabricLoader.getInstance().isModLoaded("sodium");
-        if (isSodiumPresent) {
-            Helper.log("Sodium is present");
-            
-            SodiumInterface.invoker = new SodiumInterface.OnSodiumPresent();
-            
-            // Sodium compat is pretty ok now. No warning needed.
-//            IPGlobal.clientTaskList.addTask(MyTaskList.oneShotTask(() -> {
-//                if (IPGlobal.enableWarning) {
-//                    CHelper.printChat(
-//                        Component.translatable("imm_ptl.sodium_warning")
-//                            .append(IPMcHelper.getDisableWarningText())
-//                    );
-//                }
-//            }));
+        // PORT(26.3): the Sodium and Iris integrations are quarantined and fabric.mod.json
+        // declares both as incompatible, so the no-op SodiumInterface/IrisInterface invokers
+        // stay installed. The OnSodiumPresent/OnIrisPresent implementations are kept in
+        // SodiumInterfaceOnPresent/IrisInterfaceOnPresent for the compatibility phase.
+        if (FabricLoader.getInstance().isModLoaded("sodium")) {
+            Helper.err("Sodium is present, but Sodium compatibility is not ported to 26.3 yet");
         }
-        else {
-            Helper.log("Sodium is not present");
-        }
-        
         if (FabricLoader.getInstance().isModLoaded("iris")) {
-            Helper.log("Iris is present");
-            IrisInterface.invoker = new IrisInterface.OnIrisPresent();
-            ExperimentalIrisPortalRenderer.init();
-            
-            IPGlobal.CLIENT_TASK_LIST.addTask(MyTaskList.oneShotTask(() -> {
-                if (IPConfig.getConfig().shouldDisplayWarning("iris")) {
-                    CHelper.printChat(
-                        Component.translatable("imm_ptl.iris_warning")
-                            .append(IPMcHelper.getDisableWarningText("iris"))
-                    );
-                }
-            }));
-        }
-        else {
-            Helper.log("Iris is not present");
+            Helper.err("Iris is present, but Iris compatibility is not ported to 26.3 yet");
         }
         
         IPModInfoChecking.initClient();

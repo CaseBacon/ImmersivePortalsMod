@@ -30,7 +30,7 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.LightChunkGetter;
 import net.minecraft.world.level.entity.ChunkStatusUpdateListener;
-import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.densityfunction.DensityFunction;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
@@ -209,7 +209,7 @@ public class NormalSkylandGenerator extends NoiseBasedChunkGenerator {
             @Override
             public Stream<Holder.Reference<StructureSet>> listElements() {
                 return structureSetLookup.listElements().filter(
-                    holder -> !holder.key().location().getPath().equals("mineshafts")
+                    holder -> !holder.key().identifier().getPath().equals("mineshafts")
                 );
             }
             

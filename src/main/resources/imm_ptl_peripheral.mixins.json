@@ -4,10 +4,6 @@
   "compatibilityLevel": "JAVA_25",
   "plugin": "qouteall.imm_ptl.peripheral.IPPeripheralMixinPlugin",
   "mixins": [
-    "common.alternate_dimension.IEChunkAccess_AlternateDim",
-    "common.alternate_dimension.IEChunkGenerator_AlternateDim",
-    "common.alternate_dimension.IENoiseGeneratorSettings",
-    "common.alternate_dimension.IENoiseRouterData",
     "common.dfu.MixinItemStackComponentizationFix",
     "common.dim_stack.MixinChunkStatusTasks_BedrockReplacement",
     "common.dim_stack.MixinMinecraftServer_DimStack_CVB",
@@ -18,8 +14,6 @@
   "client": [
     "client.MixinBossHealthOverlay_CVB",
     "client.MixinSplashManager_CVB",
-    "client.alternate_dimension.MixinClientLevelData_CVB",
-    "client.alternate_dimension.MixinFogRenderer_A_CVB",
     "client.dim_stack.MixinCreateWorldScreen_CVB",
     "client.dim_stack.MixinCreateWorldScreenMoreTab_CVB",
     "client.portal_wand.MixinDebugRenderer",

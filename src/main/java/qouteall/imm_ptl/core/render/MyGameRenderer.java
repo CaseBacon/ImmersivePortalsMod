@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.core.render;
 
+import net.minecraft.util.profiling.Profiler;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
@@ -8,7 +9,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.FogRenderer;
+import net.minecraft.client.renderer.fog.FogRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.PostChain;
@@ -147,7 +148,7 @@ public class MyGameRenderer {
         ObjectArrayList<SectionRenderDispatcher.RenderSection> oldChunkInfoList =
             ((IEWorldRenderer) oldWorldRenderer).portal_getChunkInfoList();
         HitResult oldCrosshairTarget = client.hitResult;
-        Camera oldCamera = client.gameRenderer.getMainCamera();
+        Camera oldCamera = client.gameRenderer.mainCamera();
         PostChain oldTransparencyShader = ((IEWorldRenderer) worldRenderer).portal_getTransparencyShader();
         RenderBuffers oldRenderBuffers = ((IEWorldRenderer) worldRenderer).ip_getRenderBuffers();
         RenderBuffers oldClientRenderBuffers = client.renderBuffers();
@@ -227,11 +228,11 @@ public class MyGameRenderer {
         
         //invoke rendering
         invokeWrapper.accept(() -> {
-            client.getProfiler().push("render_portal_content");
+            Profiler.get().push("render_portal_content");
             client.gameRenderer.renderLevel(
                 client.getTimer()
             );
-            client.getProfiler().pop();
+            Profiler.get().pop();
         });
         
         SodiumInterface.invoker.switchContextWithCurrentWorldRenderer(newSodiumContext);
@@ -289,10 +290,10 @@ public class MyGameRenderer {
      */
     @IPVanillaCopy
     public static void resetFogState() {
-        Camera camera = client.gameRenderer.getMainCamera();
+        Camera camera = client.gameRenderer.mainCamera();
         float g = client.gameRenderer.getRenderDistance();
         
-        Vec3 cameraPos = camera.getPosition();
+        Vec3 cameraPos = camera.position();
         double x = cameraPos.x();
         double y = cameraPos.y();
         double z = cameraPos.z();
@@ -308,7 +309,7 @@ public class MyGameRenderer {
     
     public static void updateFogColor() {
         FogRenderer.setupColor(
-            client.gameRenderer.getMainCamera(),
+            client.gameRenderer.mainCamera(),
             RenderStates.getPartialTick(),
             client.level,
             client.options.getEffectiveRenderDistance(),

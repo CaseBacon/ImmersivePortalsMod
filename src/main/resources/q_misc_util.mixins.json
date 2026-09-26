@@ -8,8 +8,7 @@
     "dimension.MixinPlayerList_Misc"
   ],
   "client": [
-    "client.IEClientPacketListener_Misc",
-    "client.MixinGui_Overlay"
+    "client.IEClientPacketListener_Misc"
   ],
   "injectors": {
     "defaultRequire": 1

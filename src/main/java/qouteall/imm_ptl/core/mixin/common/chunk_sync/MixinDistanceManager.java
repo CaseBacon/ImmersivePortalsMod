@@ -8,8 +8,6 @@ import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.DistanceManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.Ticket;
-import net.minecraft.util.SortedArraySet;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,18 +17,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import qouteall.imm_ptl.core.chunk_loading.ImmPtlChunkTickets;
 import qouteall.imm_ptl.core.ducks.IEChunkMap;
-import qouteall.imm_ptl.core.ducks.IEDistanceManager;
 import qouteall.imm_ptl.core.platform_specific.IPConfig;
 
 @Mixin(DistanceManager.class)
-public abstract class MixinDistanceManager implements IEDistanceManager {
+public abstract class MixinDistanceManager {
     
     @Shadow
     @Final
     private Long2ObjectMap<ObjectSet<ServerPlayer>> playersPerChunk;
-    
-    @Shadow
-    protected abstract SortedArraySet<Ticket<?>> getTickets(long position);
     
     // avoid NPE
     @Inject(method = "Lnet/minecraft/server/level/DistanceManager;removePlayer(Lnet/minecraft/core/SectionPos;Lnet/minecraft/server/level/ServerPlayer;)V", at = @At("HEAD"))
@@ -39,7 +33,7 @@ public abstract class MixinDistanceManager implements IEDistanceManager {
         ServerPlayer serverPlayer,
         CallbackInfo ci
     ) {
-        long chunkPos = sectionPos.chunk().toLong();
+        long chunkPos = sectionPos.chunk().pack();
         playersPerChunk.computeIfAbsent(chunkPos, k -> new ObjectOpenHashSet<>());
     }
     
@@ -52,10 +46,5 @@ public abstract class MixinDistanceManager implements IEDistanceManager {
             ServerLevel world = ((IEChunkMap) chunkManager).ip_getWorld();
             ImmPtlChunkTickets.get(world).flushThrottling(world);
         }
-    }
-    
-    @Override
-    public SortedArraySet<Ticket<?>> portal_getTicketSet(long chunkPos) {
-        return getTickets(chunkPos);
     }
 }

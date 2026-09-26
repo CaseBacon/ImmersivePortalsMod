@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.core.render;
 
+import net.minecraft.util.profiling.Profiler;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -138,7 +139,7 @@ public class ImmPtlViewArea extends ViewArea {
      */
     @Override
     public void repositionCamera(double playerX, double playerZ) {
-        Minecraft.getInstance().getProfiler().push("built_section_storage");
+        Profiler.get().push("built_section_storage");
         
         int cameraBlockX = Mth.floor(playerX);
         int cameraBlockZ = Mth.floor(playerZ);
@@ -160,7 +161,7 @@ public class ImmPtlViewArea extends ViewArea {
         this.sections = preset.data;
         this.currentPreset = preset;
         
-        Minecraft.getInstance().getProfiler().pop();
+        Profiler.get().pop();
     }
     
     @Override
@@ -170,7 +171,7 @@ public class ImmPtlViewArea extends ViewArea {
     }
     
     public RenderSection provideBuiltChunkByChunkPos(int cx, int cy, int cz) {
-        Column column = provideColumn(ChunkPos.asLong(cx, cz));
+        Column column = provideColumn(ChunkPos.pack(cx, cz));
         int offsetChunkY = Mth.clamp(
             cy - McHelper.getMinSectionY(level), 0, McHelper.getYSectionNumber(level) - 1
         );
@@ -197,7 +198,7 @@ public class ImmPtlViewArea extends ViewArea {
                 Validate.isTrue(px % 16 == 0);
                 Validate.isTrue(pz % 16 == 0);
                 
-                Column column = provideColumn(ChunkPos.asLong(px >> 4, pz >> 4));
+                Column column = provideColumn(ChunkPos.pack(px >> 4, pz >> 4));
                 
                 for (int offsetCy = 0; offsetCy < this.sectionGridSizeY; ++offsetCy) {
                     int index = this.getChunkIndex(cx, offsetCy, cz);
@@ -232,7 +233,7 @@ public class ImmPtlViewArea extends ViewArea {
                 Validate.isTrue(px % 16 == 0);
                 Validate.isTrue(pz % 16 == 0);
                 
-                long sectionPos = ChunkPos.asLong(px >> 4, pz >> 4);
+                long sectionPos = ChunkPos.pack(px >> 4, pz >> 4);
                 
                 func.accept(sectionPos);
             }
@@ -289,7 +290,7 @@ public class ImmPtlViewArea extends ViewArea {
     }
     
     private void purge() {
-        Minecraft.getInstance().getProfiler().push("my_built_section_storage_purge");
+        Profiler.get().push("my_built_section_storage_purge");
         
         long dropTime = Helper.secondToNano(GcMonitor.isMemoryNotEnough() ? 3 : 20);
         
@@ -348,7 +349,7 @@ public class ImmPtlViewArea extends ViewArea {
             });
         }
         
-        Minecraft.getInstance().getProfiler().pop();
+        Profiler.get().pop();
     }
     
     private boolean shouldDropPreset(long dropTime, long currentTime, Preset preset) {
@@ -393,7 +394,7 @@ public class ImmPtlViewArea extends ViewArea {
     public boolean isRegionActive(int cxStart, int czStart, int cxEnd, int czEnd) {
         for (int cx = cxStart; cx <= cxEnd; cx++) {
             for (int cz = czStart; cz <= czEnd; cz++) {
-                if (columnMap.containsKey(ChunkPos.asLong(cx, cz))) {
+                if (columnMap.containsKey(ChunkPos.pack(cx, cz))) {
                     return true;
                 }
             }
@@ -403,7 +404,7 @@ public class ImmPtlViewArea extends ViewArea {
     }
     
     public void onChunkUnload(int sectionX, int sectionZ) {
-        long sectionPos = ChunkPos.asLong(sectionX, sectionZ);
+        long sectionPos = ChunkPos.pack(sectionX, sectionZ);
         Column column = columnMap.get(sectionPos);
         if (column != null) {
             for (RenderSection builtChunk : column.sections) {
@@ -460,7 +461,7 @@ public class ImmPtlViewArea extends ViewArea {
             return null;
         }
         
-        long l = ChunkPos.asLong(cx, cz);
+        long l = ChunkPos.pack(cx, cz);
         Column column = provideColumn(l);
         
         column.mark = timeMark;
@@ -476,7 +477,7 @@ public class ImmPtlViewArea extends ViewArea {
             return null;
         }
         
-        long l = ChunkPos.asLong(cx, cz);
+        long l = ChunkPos.pack(cx, cz);
         Column column = columnMap.get(l);
         
         if (column == null) {

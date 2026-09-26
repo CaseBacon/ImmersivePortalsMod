@@ -20,9 +20,16 @@ import qouteall.q_misc_util.ImplRemoteProcedureCall;
  *
  * <p>
  *     This Remote Procedure Call API provides an easier way of networking.
- *     Just write a static method, then you can remotely invoke this method.
- *     No need to register the packet, no need to write serialization/deserialization code.
- *     The arguments will be automatically serialized and deserialized.
+ *     Write a static method, register it, then you can remotely invoke it.
+ *     The arguments are serialized with the codecs registered in {@link ImplRemoteProcedureCall}.
+ * </p>
+ *
+ * <p>
+ *     Since the Minecraft 26.3 port every remotely invocable method must be registered
+ *     with {@link #registerServerHandler(Class, String)} (the client invokes it on the server)
+ *     or {@link #registerClientHandler(Class, String)} (the server invokes it on the client).
+ *     A method that is not registered is never invoked, and a received method path never
+ *     causes class loading. Register client handlers only on the client.
  * </p>
  *
  * For example:
@@ -116,7 +123,7 @@ public class McRemoteProcedureCall {
     public static Packet<ClientCommonPacketListener> createPacketToSendToClient(
         String methodPath, Object... arguments
     ) {
-        return ImplRemoteProcedureCall.createS2CPacket(methodPath, arguments);
+        return ImplRemoteProcedureCall.createClientboundPacket(methodPath, arguments);
     }
     
     /**
@@ -154,6 +161,23 @@ public class McRemoteProcedureCall {
     public static Packet<ServerCommonPacketListener> createPacketToSendToServer(
         String methodPath, Object... arguments
     ) {
-        return ImplRemoteProcedureCall.createC2SPacket(methodPath, arguments);
+        return ImplRemoteProcedureCall.createServerboundPacket(methodPath, arguments);
+    }
+    
+    /**
+     * Allows clients to invoke {@code owner.methodName(ServerPlayer player, ...)} on the server.
+     * The method must be a unique public static method and its first parameter must be ServerPlayer.
+     * Treat all arguments as untrusted input.
+     */
+    public static void registerServerHandler(Class<?> owner, String methodName) {
+        ImplRemoteProcedureCall.registerServerbound(owner, methodName);
+    }
+    
+    /**
+     * Allows the server to invoke {@code owner.methodName(...)} on the client.
+     * Call this only on the client side.
+     */
+    public static void registerClientHandler(Class<?> owner, String methodName) {
+        ImplRemoteProcedureCall.registerClientbound(owner, methodName);
     }
 }

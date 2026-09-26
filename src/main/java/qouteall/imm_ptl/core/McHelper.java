@@ -1,5 +1,15 @@
 package qouteall.imm_ptl.core;
 
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import java.net.URI;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.level.storage.ValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
+import com.mojang.serialization.MapCodec;
+import net.minecraft.world.entity.EntitySpawnReason;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
@@ -7,7 +17,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -19,7 +29,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ChunkMap;
@@ -80,18 +90,54 @@ import java.util.stream.Stream;
 // mc related helper methods
 public class McHelper {
     
+    /**
+     * Reads or writes all keys of a {@link ValueInput}/{@link ValueOutput} as one {@link CompoundTag}.
+     * Used to keep the pre-26.3 NBT layout of Immersive Portals entities and saved data.
+     */
+    private static final MapCodec<CompoundTag> WHOLE_COMPOUND_TAG = MapCodec.assumeMapUnsafe(CompoundTag.CODEC);
+    
+    public static CompoundTag readWholeTag(ValueInput input) {
+        return input.read(WHOLE_COMPOUND_TAG).orElseGet(CompoundTag::new);
+    }
+    
+    public static void writeWholeTag(ValueOutput output, CompoundTag tag) {
+        output.store(WHOLE_COMPOUND_TAG, tag);
+    }
+    
+    /**
+     * Replacement of the pre-26.3 {@code Entity#load(CompoundTag)}.
+     */
+    public static void loadEntityFromTag(Entity entity, CompoundTag tag) {
+        try (ProblemReporter.ScopedCollector reporter =
+                 new ProblemReporter.ScopedCollector(entity.problemPath(), LOGGER)) {
+            entity.load(TagValueInput.create(reporter, entity.registryAccess(), tag));
+        }
+    }
+    
+    /**
+     * Replacement of the pre-26.3 {@code Entity#saveWithoutId(CompoundTag)}.
+     */
+    public static CompoundTag saveEntityToTag(Entity entity) {
+        try (ProblemReporter.ScopedCollector reporter =
+                 new ProblemReporter.ScopedCollector(entity.problemPath(), LOGGER)) {
+            TagValueOutput output = TagValueOutput.createWithContext(reporter, entity.registryAccess());
+            entity.saveWithoutId(output);
+            return output.buildResult();
+        }
+    }
+    
     private static final Logger LOGGER = LogUtils.getLogger();
     
     public static class Placeholder {}
     
     public static final Placeholder placeholder = new Placeholder();
     
-    public static ResourceLocation newResourceLocation(String a, String b) {
-        return ResourceLocation.fromNamespaceAndPath(a, b);
+    public static Identifier newResourceLocation(String a, String b) {
+        return Identifier.fromNamespaceAndPath(a, b);
     }
     
-    public static ResourceLocation newResourceLocation(String a) {
-        return ResourceLocation.parse(a);
+    public static Identifier newResourceLocation(String a) {
+        return Identifier.parse(a);
     }
     
     @Deprecated
@@ -120,7 +166,7 @@ public class McHelper {
         String text
     ) {
         Helper.log(text);
-        player.displayClientMessage(Component.literal(text), false);
+        player.sendSystemMessage(Component.literal(text));
     }
     
     public static long getServerGameTime() {
@@ -239,8 +285,8 @@ public class McHelper {
     @SuppressWarnings("JavadocReference")
     @IPVanillaCopy
     public static int getPlayerLoadDistance(ServerPlayer player) {
-        assert player.getServer() != null;
-        int loadDistanceOnServer = getLoadDistanceOnServer(player.getServer());
+        assert player.level().getServer() != null;
+        int loadDistanceOnServer = getLoadDistanceOnServer(player.level().getServer());
         return Mth.clamp(player.requestedViewDistance(), 2, loadDistanceOnServer);
     }
     
@@ -318,10 +364,8 @@ public class McHelper {
         // minecarts, boats and LivingEntity use position interpolation
         // don't make interpolate, or it may interpolate into unloaded chunks
         vehicle.setPos(newVehiclePos.x(), newVehiclePos.y(), newVehiclePos.z());
-        vehicle.lerpTo(
-            newVehiclePos.x(), newVehiclePos.y(), newVehiclePos.z(),
-            vehicle.getYRot(), vehicle.getXRot(), 0
-        );
+        // equivalent of the pre-1.21.5 lerpTo(..., 0 steps): stop any pending interpolation
+        vehicle.getInterpolation().cancel();
         
         McHelper.setPosAndLastTickPos(
             vehicle, newVehiclePos, newVehicleLastTickPos
@@ -335,7 +379,7 @@ public class McHelper {
         ResourceKey<Level> dimension,
         int x, int z
     ) {
-        ChunkHolder chunkHolder_ = getIEChunkMap(dimension).ip_getChunkHolder(ChunkPos.asLong(x, z));
+        ChunkHolder chunkHolder_ = getIEChunkMap(dimension).ip_getChunkHolder(ChunkPos.pack(x, z));
         if (chunkHolder_ == null) {
             return null;
         }
@@ -347,7 +391,7 @@ public class McHelper {
     ) {
         ChunkHolder chunkHolder_ = ((IEChunkMap) (
             (ServerChunkCache) world.getChunkSource()
-        ).chunkMap).ip_getChunkHolder(ChunkPos.asLong(x, z));
+        ).chunkMap).ip_getChunkHolder(ChunkPos.pack(x, z));
         if (chunkHolder_ == null) {
             return null;
         }
@@ -396,11 +440,11 @@ public class McHelper {
     
     
     public static Portal copyEntity(Portal portal) {
-        Portal newPortal = ((Portal) portal.getType().create(portal.level()));
+        Portal newPortal = ((Portal) portal.getType().create(portal.level(), EntitySpawnReason.EVENT));
         
         Validate.notNull(newPortal);
         
-        newPortal.load(portal.saveWithoutId(new CompoundTag()));
+        loadEntityFromTag(newPortal, saveEntityToTag(portal));
         return newPortal;
     }
     
@@ -410,7 +454,7 @@ public class McHelper {
      * Only check whether the region file exists now.
      */
     public static boolean getDoesRegionFileExist(ResourceKey<Level> toDimension, BlockPos toPos) {
-        ChunkPos chunkPos = new ChunkPos(toPos);
+        ChunkPos chunkPos = ChunkPos.containing(toPos);
         
         LevelStorageSource.LevelStorageAccess storageSource = MiscHelper.getServer().storageSource;
         
@@ -422,9 +466,7 @@ public class McHelper {
     
     public static MutableComponent getLinkText(String link) {
         return Component.literal(link).withStyle(
-            style -> style.withClickEvent(new ClickEvent(
-                ClickEvent.Action.OPEN_URL, link
-            )).withUnderlined(true)
+            style -> style.withClickEvent(new ClickEvent.OpenUrl(URI.create(link))).withUnderlined(true)
         );
     }
     
@@ -433,9 +475,14 @@ public class McHelper {
     }
     
     public static void invokeCommandAs(Entity commandSender, List<String> commandList) {
-        CommandSourceStack commandSource = commandSender.createCommandSourceStack().withPermission(2).withSuppressedOutput();
-        MinecraftServer server = commandSender.getServer();
-        assert server != null;
+        if (!(commandSender.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        MinecraftServer server = serverLevel.getServer();
+        CommandSourceStack commandSource = commandSender
+            .createCommandSourceStackForNameResolution(serverLevel)
+            .withPermission(LevelBasedPermissionSet.GAMEMASTER)
+            .withSuppressedOutput();
         Commands commandManager = server.getCommands();
         
         for (String command : commandList) {
@@ -455,7 +502,8 @@ public class McHelper {
             return;
         }
         
-        entityTracker.broadcastAndSend(packet);
+        //noinspection unchecked
+        entityTracker.sendToTrackingPlayersAndSelf((Packet<? super ClientGamePacketListener>) packet);
     }
     
     //it's a little bit incorrect with corner glass pane
@@ -481,14 +529,14 @@ public class McHelper {
     
     public static boolean isServerChunkFullyLoaded(ServerLevel world, ChunkPos chunkPos) {
         LevelChunk chunk = getServerChunkIfPresent(
-            world.dimension(), chunkPos.x, chunkPos.z
+            world.dimension(), chunkPos.x(), chunkPos.z()
         );
         
         if (chunk == null) {
             return false;
         }
         
-        boolean entitiesLoaded = world.areEntitiesLoaded(chunkPos.toLong());
+        boolean entitiesLoaded = world.areEntitiesLoaded(chunkPos.pack());
         
         return entitiesLoaded;
     }
@@ -740,8 +788,8 @@ public class McHelper {
     }
     
     
-    public static ResourceLocation dimensionTypeId(ResourceKey<Level> dimType) {
-        return dimType.location();
+    public static Identifier dimensionTypeId(ResourceKey<Level> dimType) {
+        return dimType.identifier();
     }
     
     public static <T> String serializeToJson(T object, Codec<T> codec) {
@@ -808,7 +856,7 @@ public class McHelper {
             }
             
             for (ServerPlayer player : playerList) {
-                player.displayClientMessage(text, false);
+                player.sendSystemMessage(text);
             }
             
             return true;
@@ -852,7 +900,7 @@ public class McHelper {
     ) {
         ServerLevel world = server.getLevel(dim);
         if (world == null) {
-            throw new RuntimeException("Missing dimension " + dim.location());
+            throw new RuntimeException("Missing dimension " + dim.identifier());
         }
         return world;
     }
@@ -862,11 +910,11 @@ public class McHelper {
     }
     
     public static int getMinY(LevelAccessor world) {
-        return world.getMinBuildHeight();
+        return world.getMinY();
     }
     
     public static int getMaxYExclusive(LevelAccessor world) {
-        return world.getMaxBuildHeight();
+        return world.getMaxY() + 1;
     }
     
     public static int getMaxContentYExclusive(LevelAccessor world) {
@@ -874,11 +922,11 @@ public class McHelper {
     }
     
     public static int getMinSectionY(LevelAccessor world) {
-        return world.getMinSection();
+        return world.getMinSectionY();
     }
     
     public static int getMaxSectionYExclusive(LevelAccessor world) {
-        return world.getMaxSection();
+        return (world.getMaxSectionY() + 1);
     }
     
     public static int getYSectionNumber(LevelAccessor world) {
@@ -893,7 +941,7 @@ public class McHelper {
         );
     }
     
-    public static String readTextResource(ResourceLocation identifier) {
+    public static String readTextResource(Identifier identifier) {
         String result = null;
         try {
             InputStream inputStream =
@@ -944,8 +992,8 @@ public class McHelper {
      * TODO possibly infer dimension name from dimension type
      */
     public static Component getDimensionName(ResourceKey<Level> dimension) {
-        String namespace = dimension.location().getNamespace();
-        String path = dimension.location().getPath();
+        String namespace = dimension.identifier().getNamespace();
+        String path = dimension.identifier().getPath();
         String translationkey = "dimension." + namespace + "." + path;
         MutableComponent component = Component.translatable(translationkey);
         
@@ -957,7 +1005,7 @@ public class McHelper {
                     "imm_ptl.a_dimension_of",
                     modName != null ? modName : namespace
                 )
-                .append(" (" + dimension.location() + ")");
+                .append(" (" + dimension.identifier() + ")");
         }
         
         return component;

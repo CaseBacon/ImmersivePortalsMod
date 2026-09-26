@@ -53,7 +53,7 @@ public class WireRenderingHelper {
         
         double periodLen = 100;
         
-        matrixStack.mulPose(rotation.toMcQuaternion());
+        matrixStack.rotate(rotation.toMcQuaternion());
         Matrix4f matrix = matrixStack.last().pose();
         
         float alpha = ((color >> 24) & 0xff) / 255f;
@@ -61,18 +61,37 @@ public class WireRenderingHelper {
         float green = ((color >> 8) & 0xff) / 255f;
         float blue = (color & 0xff) / 255f;
         
-        LevelRenderer.renderLineBox(
-            matrixStack,
-            vertexConsumer,
-            -boxSize / 2,
-            -boxSize / 2,
-            -boxSize / 2,
-            boxSize / 2,
-            boxSize / 2,
-            boxSize / 2,
-            red, green, blue, alpha
+        renderLineBox(
+            vertexConsumer, matrix, color,
+            -boxSize / 2, -boxSize / 2, -boxSize / 2,
+            boxSize / 2, boxSize / 2, boxSize / 2
         );
         matrixStack.popPose();
+    }
+    
+    /**
+     * The 12 edges of a box (replaces the removed LevelRenderer.renderLineBox).
+     */
+    public static void renderLineBox(
+        VertexConsumer vertexConsumer, Matrix4f matrix, int color,
+        double minX, double minY, double minZ, double maxX, double maxY, double maxZ
+    ) {
+        Vec3[] corners = new Vec3[8];
+        for (int i = 0; i < 8; i++) {
+            corners[i] = new Vec3(
+                (i & 1) == 0 ? minX : maxX,
+                (i & 2) == 0 ? minY : maxY,
+                (i & 4) == 0 ? minZ : maxZ
+            );
+        }
+        Matrix3f normalMatrix = new Matrix3f();
+        for (int i = 0; i < 8; i++) {
+            for (int bit = 1; bit < 8; bit <<= 1) {
+                if ((i & bit) == 0) {
+                    putLine(vertexConsumer, color, matrix, normalMatrix, corners[i], corners[i | bit]);
+                }
+            }
+        }
     }
     
     public static DQuaternion getRandomSmoothRotation(Random random) {
@@ -139,7 +158,7 @@ public class WireRenderingHelper {
             planeCenter.z - cameraPos.z
         );
         
-        matrixStack.mulPose(
+        matrixStack.rotate(
             DQuaternion.rotationByDegrees(normal, CHelper.getSmoothCycles(211) * 360)
                 .toMcQuaternion()
         );
@@ -331,7 +350,7 @@ public class WireRenderingHelper {
             center.z - cameraPos.z
         );
         
-        matrixStack.mulPose(rotation.toMcQuaternion());
+        matrixStack.rotate(rotation.toMcQuaternion());
         
         matrixStack.scale((float) scale, (float) scale, (float) scale);
         
@@ -539,7 +558,7 @@ public class WireRenderingHelper {
             sphere.center().z - cameraPos.z
         );
         
-        matrixStack.mulPose(sphereOrientation.toMcQuaternion());
+        matrixStack.rotate(sphereOrientation.toMcQuaternion());
         matrixStack.scale((float) sphere.radius(), (float) sphere.radius(), (float) sphere.radius());
         
         Matrix4f matrix = matrixStack.last().pose();
