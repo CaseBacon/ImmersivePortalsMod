@@ -225,6 +225,8 @@ loom {
             name = "Client Game Test"
             source sourceSets.gametest
             vmArg "-Dfabric.client.gametest"
+            // a failed test must end the process instead of waiting in Fabric Loader's error window
+            vmArg "-Dfabric.noGui=true"
             runDir "build/clientgametest"
         }
     }

@@ -1,12 +1,13 @@
 package qouteall.imm_ptl.core.chunk_loading;
 
 import com.mojang.logging.LogUtils;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongPredicate;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.ChunkLevel;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkResult;
 import net.minecraft.server.level.DistanceManager;
@@ -90,7 +91,15 @@ public class ImmPtlChunkTickets {
     
     private final ArrayList<LongLinkedOpenHashSet> chunksToAddTicketByDistance = new ArrayList<>();
     
-    private final LongOpenHashSet waitingForLoading = new LongOpenHashSet();
+    /**
+     * chunk pos -> game time when its ticket was added
+     */
+    private final Long2LongOpenHashMap waitingForLoading = new Long2LongOpenHashMap();
+    
+    /**
+     * A chunk that has not become entity-ticking after this many ticks no longer occupies a throttling slot.
+     */
+    private static final long LOADING_WAIT_LIMIT_TICKS = 20 * 30;
     
     private boolean isValid = true;
     
@@ -182,10 +191,13 @@ public class ImmPtlChunkTickets {
         }
         
         // clear the already loaded chunks
-        waitingForLoading.removeIf((long chunkPos) -> {
+        long gameTime = world.getGameTime();
+        waitingForLoading.long2LongEntrySet().removeIf(entry -> {
+            long chunkPos = entry.getLongKey();
             ChunkHolder chunkHolder = getChunkHolder(world, chunkPos);
             if (chunkHolder == null) {
-                return true;
+                // the ticket was added but the chunk map has not processed it yet
+                return isWaitingTooLong(world, chunkPos, entry.getLongValue(), gameTime);
             }
             
             ChunkResult<LevelChunk> resultNow = chunkHolder.getEntityTickingChunkFuture()
@@ -196,9 +208,16 @@ public class ImmPtlChunkTickets {
             }
             
             if (!resultNow.isSuccess()) {
+                if (!ChunkLevel.isEntityTicking(chunkHolder.getTicketLevel())) {
+                    // The holder has not been raised to the ticket's level yet
+                    // (tickets are applied in DistanceManager.runAllUpdates),
+                    // so its entity ticking future is still the completed "unloaded" placeholder.
+                    return isWaitingTooLong(world, chunkPos, entry.getLongValue(), gameTime);
+                }
+                
                 LOGGER.error(
                     "Chunk loading failure {} {} {}",
-                    world, ChunkPos.unpack(chunkPos)
+                    world, ChunkPos.unpack(chunkPos), resultNow.getError()
                 );
             }
             
@@ -215,9 +234,9 @@ public class ImmPtlChunkTickets {
                     
                     long chunkPos = queue.removeFirstLong();
                     if (chunkPosToTicketInfo.containsKey(chunkPos)) {
-                        addTicket(world, chunkPos);
-                        
-                        waitingForLoading.add(chunkPos);
+                        if (addTicket(world, chunkPos)) {
+                            waitingForLoading.put(chunkPos, gameTime);
+                        }
                     }
                     else {
                         LOGGER.warn("Chunk {} is not in the queue", ChunkPos.unpack(chunkPos));
@@ -227,9 +246,25 @@ public class ImmPtlChunkTickets {
         }
     }
     
-    private static void addTicket(ServerLevel world, long chunkPos) {
+    private static boolean isWaitingTooLong(
+        ServerLevel world, long chunkPos, long ticketGameTime, long gameTime
+    ) {
+        if (gameTime - ticketGameTime > LOADING_WAIT_LIMIT_TICKS) {
+            LOGGER.warn(
+                "Chunk {} {} did not become entity-ticking within {} ticks",
+                world, ChunkPos.unpack(chunkPos), LOADING_WAIT_LIMIT_TICKS
+            );
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * @return whether a ticket was added
+     */
+    private static boolean addTicket(ServerLevel world, long chunkPos) {
         if (!IPConfig.getConfig().enableImmPtlChunkLoading) {
-            return;
+            return false;
         }
         
         ChunkPos chunkPosObj = ChunkPos.unpack(chunkPos);
@@ -238,6 +273,8 @@ public class ImmPtlChunkTickets {
         if (enableDebugRateStat) {
             debugRateStat.hit();
         }
+        
+        return true;
     }
     
     public void purge(
