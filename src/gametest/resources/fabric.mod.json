@@ -12,7 +12,8 @@
       "qouteall.imm_ptl.gametest.TeleportRequestTests"
     ],
     "fabric-client-gametest": [
-      "qouteall.imm_ptl.gametest.ClientPortalTests"
+      "qouteall.imm_ptl.gametest.ClientPortalTests",
+      "qouteall.imm_ptl.gametest.DedicatedServerPortalTests"
     ]
   },
   "mixins": [
