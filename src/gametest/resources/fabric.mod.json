@@ -10,6 +10,9 @@
       "qouteall.imm_ptl.gametest.ServerStartTests",
       "qouteall.imm_ptl.gametest.PortalEntityTests",
       "qouteall.imm_ptl.gametest.TeleportRequestTests"
+    ],
+    "fabric-client-gametest": [
+      "qouteall.imm_ptl.gametest.ClientPortalTests"
     ]
   },
   "mixins": [

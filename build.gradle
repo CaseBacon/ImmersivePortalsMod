@@ -188,7 +188,7 @@ test {
 // A separate test mod (src/gametest) run on Fabric's headless GameTest server:
 //   ./gradlew runGametest
 // The server loads a world with all mods and mixins, runs the tests and exits with a
-// non-zero status on failure. Nothing from this source set is packaged into the mod jar.
+// non-zero status on failure. Client tests (./gradlew runClientGametest) drive a real client. Nothing from this source set is packaged into the mod jar.
 sourceSets {
     gametest {
         compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
@@ -199,6 +199,7 @@ sourceSets {
 dependencies {
     // only on the game test classpath: the module changes login behaviour in normal dev runs
     gametestImplementation fabricApi.module("fabric-gametest-api-v1", project.fabric_version)
+    gametestImplementation fabricApi.module("fabric-client-gametest-api-v1", project.fabric_version)
 }
 
 loom {
@@ -216,6 +217,15 @@ loom {
             vmArg "-Dfabric-api.gametest"
             vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.file('gametest/junit.xml').get().asFile}"
             runDir "build/gametest"
+        }
+        // real client with the renderer; creates a singleplayer world (no EULA involved):
+        //   ./gradlew runClientGametest
+        clientGametest {
+            client()
+            name = "Client Game Test"
+            source sourceSets.gametest
+            vmArg "-Dfabric.client.gametest"
+            runDir "build/clientgametest"
         }
     }
 }

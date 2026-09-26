@@ -42,10 +42,6 @@ public class ImmPtlRemoteCalls {
         ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "doListPortals");
         ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "reportResourceConsumption");
         ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "setNoFog");
-        ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "serverToClient");
-        ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "disableWarning");
-        ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "disableWarningFor");
-        ImplRemoteProcedureCall.registerClientbound(ClientDebugCommand.RemoteCallables.class, "disableUpdateCheck");
         
         ImplRemoteProcedureCall.registerClientbound(PortalCommand.RemoteCallables.class, "clientAccelerate");
         ImplRemoteProcedureCall.registerClientbound(TransformationManager.RemoteCallables.class, "enableIsometricView");

@@ -1,9 +1,5 @@
 package qouteall.imm_ptl.peripheral;
 
-import java.util.List;
-import qouteall.imm_ptl.peripheral.dim_stack.DimStackInfo;
-import qouteall.imm_ptl.peripheral.wand.ProtoPortal;
-import qouteall.q_misc_util.ImplRemoteProcedureCall;
 import com.mojang.serialization.MapCodec;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -65,7 +61,7 @@ public class PeripheralModMain {
     
     @Environment(EnvType.CLIENT)
     public static void initClient() {
-        ImplRemoteProcedureCall.registerClientbound(DimStackManagement.RemoteCallables.class, "clientOpenScreen");
+        PeripheralRemoteCalls.registerClientbound();
         
         IPOuterClientMisc.initClient();
         
@@ -89,18 +85,7 @@ public class PeripheralModMain {
         
         PortalWandInteraction.init();
         
-        // remote procedure call allowlist (see ImplRemoteProcedureCall)
-        ImplRemoteProcedureCall.registerJsonCodec(ProtoPortal.class);
-        ImplRemoteProcedureCall.registerJsonCodec(PortalWandInteraction.DraggingInfo.class);
-        ImplRemoteProcedureCall.registerJsonCodec(DimStackInfo.class);
-        for (String method : List.of(
-            "finishPortalCreation", "requestApplyDrag", "undoDrag", "finishDragging",
-            "copyCutPortal", "confirmCopyCut", "clearPortalClipboard"
-        )) {
-            ImplRemoteProcedureCall.registerServerbound(PortalWandInteraction.RemoteCallables.class, method);
-        }
-        ImplRemoteProcedureCall.registerServerbound(DimStackManagement.RemoteCallables.class, "serverSetupDimStack");
-        ImplRemoteProcedureCall.registerServerbound(DimStackManagement.RemoteCallables.class, "serverRemoveDimStack");
+        PeripheralRemoteCalls.registerServerbound();
         
         CommandStickItem.registerCommandStickTypes();
         
