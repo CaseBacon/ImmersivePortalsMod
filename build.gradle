@@ -71,7 +71,6 @@ loom {
 def portQuarantine = [
     'qouteall/imm_ptl/core/compat/mixin/**',
     'qouteall/imm_ptl/core/compat/iris_compatibility/**',
-    'qouteall/imm_ptl/core/compat/sodium_compatibility/**',
     // client rendering: redesigned for the 26.3 renderer in phases 5-6
     'qouteall/imm_ptl/core/render/**',
     'qouteall/imm_ptl/core/mixin/client/render/**',
@@ -91,7 +90,6 @@ def portQuarantine = [
 // files inside quarantined directories that are already ported
 def portQuarantineKeep = [
     'qouteall/imm_ptl/core/compat/iris_compatibility/IrisInterface.java',
-    'qouteall/imm_ptl/core/compat/sodium_compatibility/SodiumInterface.java',
     // render state and math classes (no GPU calls) are ported first
     'qouteall/imm_ptl/core/render/context_management/RenderStates.java',
     'qouteall/imm_ptl/core/render/context_management/PortalRendering.java',

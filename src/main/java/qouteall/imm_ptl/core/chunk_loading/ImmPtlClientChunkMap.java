@@ -8,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -271,8 +272,11 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     public void onLightUpdate(LightLayer lightType, SectionPos chunkSectionPos) {
         // mark the section dirty in the extractor of this dimension (not necessarily the current one)
         LevelExtractor extractor = ClientWorldLoader.EXTRACTOR_MAP.get(level.dimension());
-        if (extractor != null) {
-            extractor.setSectionDirty(chunkSectionPos.x(), chunkSectionPos.y(), chunkSectionPos.z());
+        LevelRenderer levelRenderer = ClientWorldLoader.WORLD_RENDERER_MAP.get(level.dimension());
+        if (extractor != null && levelRenderer != null) {
+            ClientWorldLoader.withLevelRendererCurrent(levelRenderer, () -> extractor.setSectionDirty(
+                chunkSectionPos.x(), chunkSectionPos.y(), chunkSectionPos.z()
+            ));
         }
     }
 

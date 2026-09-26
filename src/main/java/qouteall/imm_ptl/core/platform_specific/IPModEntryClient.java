@@ -10,6 +10,7 @@ import qouteall.imm_ptl.core.IPModMainClient;
 import qouteall.imm_ptl.core.compat.IPModInfoChecking;
 import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
+import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterfaceOnPresent;
 import qouteall.imm_ptl.core.portal.BreakableMirror;
 import qouteall.imm_ptl.core.portal.EndPortalEntity;
 import qouteall.imm_ptl.core.portal.LoadingIndicatorEntity;
@@ -65,13 +66,12 @@ public class IPModEntryClient implements ClientModInitializer {
         
         initPortalRenderers();
         
-        // PORT(26.3): the Sodium and Iris integrations are quarantined and fabric.mod.json
-        // declares both as incompatible, so the no-op SodiumInterface/IrisInterface invokers
-        // stay installed. The OnSodiumPresent/OnIrisPresent implementations are kept in
-        // SodiumInterfaceOnPresent/IrisInterfaceOnPresent for the compatibility phase.
         if (FabricLoader.getInstance().isModLoaded("sodium")) {
-            Helper.err("Sodium is present, but Sodium compatibility is not ported to 26.3 yet");
+            Helper.log("Sodium is present");
+            SodiumInterface.invoker = new SodiumInterfaceOnPresent();
         }
+        // PORT(26.3): the Iris integration is quarantined and fabric.mod.json declares Iris as incompatible,
+        // so the no-op IrisInterface invoker stays installed. IrisInterfaceOnPresent is kept for the Iris phase.
         if (FabricLoader.getInstance().isModLoaded("iris")) {
             Helper.err("Iris is present, but Iris compatibility is not ported to 26.3 yet");
         }

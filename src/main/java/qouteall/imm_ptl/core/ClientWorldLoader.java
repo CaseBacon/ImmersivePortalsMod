@@ -191,7 +191,12 @@ public class ClientWorldLoader {
     ) {
         // the vanilla renderer and extractor are managed by Minecraft
         if (extractor != null && extractor != CLIENT.levelExtractor) {
-            extractor.setLevel(null);
+            if (worldRenderer != null) {
+                withLevelRendererCurrent(worldRenderer, () -> extractor.setLevel(null));
+            }
+            else {
+                extractor.setLevel(null);
+            }
         }
         if (worldRenderer != null && worldRenderer != CLIENT.levelRenderer) {
             worldRenderer.close();
@@ -423,8 +428,10 @@ public class ClientWorldLoader {
             // all worlds share the same tick rate manager
             ((IEClientWorld) newWorld).ip_setTickRateManager(CLIENT.level.tickRateManager());
             
-            levelExtractor.setLevel(newWorld);
-            levelExtractor.onResourceManagerReload(CLIENT.getResourceManager());
+            withLevelRendererCurrent(worldRenderer, () -> {
+                levelExtractor.setLevel(newWorld);
+                levelExtractor.onResourceManagerReload(CLIENT.getResourceManager());
+            });
 
             CLIENT_WORLD_MAP.put(dimension, newWorld);
             WORLD_RENDERER_MAP.put(dimension, worldRenderer);
@@ -557,6 +564,24 @@ public class ClientWorldLoader {
             ((IEParticleManager) CLIENT.particleEngine).ip_setWorld(originalWorld);
             ((IEClientPlayNetworkHandler) networkHandler).ip_setWorld(originalNetHandlerWorld);
             isWorldSwitched = originalIsWorldSwitched;
+        }
+    }
+    
+    /**
+     * Makes {@code levelRenderer} the current {@code Minecraft.levelRenderer} while {@code runnable} runs.
+     * <p>
+     * Sodium gives every level renderer its own terrain renderer, but its {@code LevelExtractor} hooks
+     * ({@code setLevel}, {@code setSectionDirty}, ...) use the one of the current {@code Minecraft.levelRenderer}.
+     * A call on the extractor of another dimension has to run with that dimension's level renderer current.
+     */
+    public static void withLevelRendererCurrent(LevelRenderer levelRenderer, Runnable runnable) {
+        LevelRenderer original = CLIENT.levelRenderer;
+        ((IEMinecraftClient) CLIENT).ip_setWorldRenderer(levelRenderer);
+        try {
+            runnable.run();
+        }
+        finally {
+            ((IEMinecraftClient) CLIENT).ip_setWorldRenderer(original);
         }
     }
     

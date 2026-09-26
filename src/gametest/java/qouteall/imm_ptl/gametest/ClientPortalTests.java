@@ -16,6 +16,7 @@ import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import qouteall.imm_ptl.core.ClientWorldLoader;
+import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal_view.PortalViewRenderer;
 import qouteall.q_misc_util.my_util.DQuaternion;
@@ -117,7 +118,7 @@ public class ClientPortalTests implements FabricClientGameTest {
             });
             context.takeScreenshot("imm_ptl_01_portal_in_overworld");
             check(
-                context.computeOnClient(mc -> PortalViewRenderer.getViewCountThisFrame() == 1),
+                context.computeOnClient(mc -> PortalViewRenderer.isViewDrawnThisFrame(portalId)),
                 "the portal view was not drawn"
             );
             context.runOnClient(mc -> PortalViewRenderer.debugDumpNextView(
@@ -191,11 +192,16 @@ public class ClientPortalTests implements FabricClientGameTest {
             context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections(), 600);
             context.waitTicks(10);
             context.takeScreenshot("imm_ptl_04_same_dimension_portal");
-            check(
-                // the nether portal behind it is in the frustum too (hidden by this portal's quad)
-                context.computeOnClient(mc -> PortalViewRenderer.getViewCountThisFrame() >= 1),
-                "the same-dimension portal view was not drawn"
+            boolean sameDimensionDrawn = context.computeOnClient(
+                mc -> PortalViewRenderer.isViewDrawnThisFrame(sameDimensionPortalId)
             );
+            if (SodiumInterface.invoker.isSodiumPresent()) {
+                // a Sodium level renderer is only used by one camera per frame
+                check(!sameDimensionDrawn, "with Sodium, same-dimension portal views are not drawn");
+            }
+            else {
+                check(sameDimensionDrawn, "the same-dimension portal view was not drawn");
+            }
             // the main view must stay stable while its renderer is also used for the portal view
             context.waitTicks(20);
             context.takeScreenshot("imm_ptl_05_same_dimension_portal_later");

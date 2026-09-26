@@ -3,6 +3,7 @@ package qouteall.imm_ptl.core.mixin.client.portal_view;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.resource.CrossFrameResourcePool;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -19,4 +20,12 @@ public interface GameRendererAccessor {
     @Mutable
     @Accessor("mainRenderTarget")
     void ip_setMainRenderTarget(RenderTarget target);
+
+    // Sodium sets up the terrain with the fog of GameRenderer.fogRenderer; a portal view swaps in its own
+    @Accessor("fogRenderer")
+    FogRenderer ip_getFogRenderer();
+
+    @Mutable
+    @Accessor("fogRenderer")
+    void ip_setFogRenderer(FogRenderer fogRenderer);
 }

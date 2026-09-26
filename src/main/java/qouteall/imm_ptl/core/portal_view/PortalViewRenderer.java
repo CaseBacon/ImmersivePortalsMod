@@ -38,6 +38,8 @@ import net.minecraft.client.renderer.state.GameRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -50,6 +52,7 @@ import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.chunk_loading.ImmPtlClientChunkMap;
+import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.mixin.client.portal_view.GameRendererAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelExtractorAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelRendererAccessor;
@@ -63,10 +66,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.OptionalDouble;
 import java.util.UUID;
 
@@ -176,6 +181,7 @@ public final class PortalViewRenderer {
     }
 
     private static final Map<UUID, View> VIEWS = new HashMap<>();
+    private static boolean sharedRendererWarned = false;
     private static final List<View> FRAME_VIEWS = new ArrayList<>();
     private static long frameIndex = 0;
 
@@ -218,11 +224,26 @@ public final class PortalViewRenderer {
         Camera mainCamera = gameRenderer.mainCamera();
         float partialTicks = deltaTracker.getGameTimeDeltaPartialTick(false);
 
+        boolean severalCamerasPerRenderer = SodiumInterface.invoker.supportsSeveralCamerasPerRenderer();
+        Set<ResourceKey<Level>> viewedDimensions = new HashSet<>();
         List<Portal> portals = collectPortalsToRender(level, mainCamera);
         for (Portal portal : portals) {
             ClientLevel destLevel = ClientWorldLoader.getOptionalWorld(portal.getDestDim());
             if (destLevel == null) {
                 continue;
+            }
+            if (!severalCamerasPerRenderer) {
+                // the level renderer of the destination may only be used by one camera this frame
+                if (destLevel == level || !viewedDimensions.add(destLevel.dimension())) {
+                    if (!sharedRendererWarned) {
+                        sharedRendererWarned = true;
+                        LOGGER.warn(
+                            "With Sodium, portals into the player's dimension and a second portal view into the "
+                                + "same dimension in one frame are not drawn"
+                        );
+                    }
+                    continue;
+                }
             }
             View view = VIEWS.computeIfAbsent(portal.getUUID(), k -> new View());
             view.portal = portal;
@@ -276,10 +297,33 @@ public final class PortalViewRenderer {
         Minecraft mc = Minecraft.getInstance();
         view.camera.setupFor(mainCamera, portal, mainLevel, destLevel, cameraEntity, deltaTracker);
 
+        // like GameRenderer.extractCamera, which runs before the level extraction
+        // (the section occlusion graph and Sodium read the camera state during the extraction)
+        CameraRenderState cameraState = view.state.cameraRenderState;
+        view.camera.extractRenderState(cameraState, deltaTracker);
+        cameraState.fogType = view.camera.getFluidInCamera();
+        cameraState.fogData = view.fogRenderer.setupFog(
+            view.camera, mc.options.getEffectiveRenderDistance(), deltaTracker,
+            mc.gameRenderer.bossOverlayWorldDarkening(partialTicks), destLevel
+        );
+        // The destination camera can be inside terrain behind the destination plane. Occlusion culling starting
+        // there could hide what is in front of the portal, so only frustum culling is used.
+        cameraState.smartCull = false;
+
+        // clip the destination world between the camera and the destination plane
+        ObliqueClipping.apply(
+            cameraState.projectionMatrix,
+            destinationPlaneInViewSpace(portal, cameraState),
+            RenderSystem.getDevice().getDeviceInfo().isZZeroToOne()
+        );
+
         LevelExtractor extractor = ClientWorldLoader.getLevelExtractor(destLevel.dimension());
         LevelExtractorAccessor extractorAccess = (LevelExtractorAccessor) extractor;
+        GameRendererAccessor gameRendererAccess = (GameRendererAccessor) mc.gameRenderer;
         LevelRenderState originalState = extractorAccess.ip_getLevelRenderState();
+        FogRenderer originalFogRenderer = gameRendererAccess.ip_getFogRenderer();
         extractorAccess.ip_setLevelRenderState(view.state);
+        gameRendererAccess.ip_setFogRenderer(view.fogRenderer);
         try {
             if (destLevel == mainLevel) {
                 // same dimension: the main extractor already consumed this frame's chunk deltas
@@ -294,23 +338,8 @@ public final class PortalViewRenderer {
         }
         finally {
             extractorAccess.ip_setLevelRenderState(originalState);
+            gameRendererAccess.ip_setFogRenderer(originalFogRenderer);
         }
-
-        // like GameRenderer.extractCamera
-        CameraRenderState cameraState = view.state.cameraRenderState;
-        view.camera.extractRenderState(cameraState, deltaTracker);
-        cameraState.fogType = view.camera.getFluidInCamera();
-        cameraState.fogData = view.fogRenderer.setupFog(
-            view.camera, mc.options.getEffectiveRenderDistance(), deltaTracker,
-            mc.gameRenderer.bossOverlayWorldDarkening(partialTicks), destLevel
-        );
-
-        // clip the destination world between the camera and the destination plane
-        ObliqueClipping.apply(
-            cameraState.projectionMatrix,
-            destinationPlaneInViewSpace(portal, cameraState),
-            RenderSystem.getDevice().getDeviceInfo().isZZeroToOne()
-        );
     }
 
     /**
@@ -427,6 +456,7 @@ public final class PortalViewRenderer {
             gameRendererAccess.ip_getResourcePool(), false, cameraState,
             terrainFog, cameraState.fogData.color, true, false
         );
+        Matrix4f previousTerrainProjection = SodiumInterface.invoker.swapTerrainProjection(cameraState.projectionMatrix);
         try {
             if (destLevel == Minecraft.getInstance().level) {
                 render.run();
@@ -438,6 +468,9 @@ public final class PortalViewRenderer {
         finally {
             levelRendererAccess.ip_setLevelRenderState(originalState);
             view.fogRenderer.endFrame();
+            if (previousTerrainProjection != null) {
+                SodiumInterface.invoker.swapTerrainProjection(previousTerrainProjection);
+            }
         }
         
         if (debugDumpPath != null) {
@@ -530,5 +563,17 @@ public final class PortalViewRenderer {
      */
     public static int getViewCountThisFrame() {
         return FRAME_VIEWS.size();
+    }
+
+    /**
+     * Whether the view of this portal was drawn in the current frame (debugging and tests).
+     */
+    public static boolean isViewDrawnThisFrame(UUID portalId) {
+        for (View view : FRAME_VIEWS) {
+            if (view.portal.getUUID().equals(portalId)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
