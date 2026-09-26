@@ -38,6 +38,7 @@ import qouteall.imm_ptl.core.platform_specific.IPConfig;
 import qouteall.imm_ptl.core.platform_specific.O_O;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.global_portals.GlobalPortalStorage;
+import qouteall.q_misc_util.my_util.LimitedLogger;
 import qouteall.q_misc_util.MiscHelper;
 import qouteall.q_misc_util.api.McRemoteProcedureCall;
 import qouteall.q_misc_util.my_util.MyTaskList;
@@ -54,6 +55,9 @@ import java.util.stream.Stream;
 
 public class ServerTeleportationManager {
     private static final Logger LOGGER = LogUtils.getLogger();
+
+    // rejected requests come from clients, so a client must not be able to flood the log
+    private static final LimitedLogger REJECTION_LOGGER = new LimitedLogger(100);
     
     private final Set<Entity> teleportingEntities = new HashSet<>();
     private final WeakHashMap<Entity, Long> lastTeleportGameTime = new WeakHashMap<>();
@@ -159,7 +163,11 @@ public class ServerTeleportationManager {
         );
     }
     
-    public void onPlayerTeleportedInClient(
+    /**
+     * Handles a client portal teleport request.
+     * @return null if the player was teleported, otherwise the reason for rejecting the request
+     */
+    public @Nullable String onPlayerTeleportedInClient(
         ServerPlayer player,
         ResourceKey<Level> dimensionBefore,
         Vec3 eyePosBeforeTeleportation,
@@ -167,17 +175,19 @@ public class ServerTeleportationManager {
     ) {
         if (player.getRemovalReason() != null) {
             LOGGER.error("Trying to teleport a removed player {}", player);
-            return;
+            return "player is removed";
         }
         
         Portal portal = findPortal(player.level().getServer(), dimensionBefore, portalId);
-        
+
         if (portal == null) {
-            LOGGER.error(
-                "Unable to find portal {} in {} to teleport {}",
+            REJECTION_LOGGER.lErr(
+                LOGGER, "Unable to find portal {} in {} to teleport {}",
                 portalId, dimensionBefore.identifier(), player
             );
-            return;
+            // the client has already moved itself, so send it back to the server-side position
+            resyncRejectedPlayer(player);
+            return "portal not found";
         }
         
         lastTeleportGameTime.put(player, McHelper.getServerGameTime());
@@ -214,17 +224,32 @@ public class ServerTeleportationManager {
             
         }
         else {
-            LOGGER.error(
-                "Player {} {} {} cannot teleport through portal {}\nReason: {}",
+            REJECTION_LOGGER.lErr(
+                LOGGER, "Player {} {} {} cannot teleport through portal {}\nReason: {}",
                 player, player.level().dimension().identifier(), player.position(),
                 portal, failReason
             );
-            teleportEntityGeneral(player, player.position(), ((ServerLevel) player.level()));
-            ScaleUtils.setBaseScale(player, ScaleUtils.getBaseScale(player));
-            GravityChangerInterface.invoker.setBaseGravityDirectionServer(
-                player, GravityChangerInterface.invoker.getGravityDirection(player)
-            );
+            resyncRejectedPlayer(player);
         }
+        return failReason;
+    }
+    
+    /**
+     * Called for a teleport request with an unknown dimension id.
+     */
+    public void onInvalidTeleportRequest(ServerPlayer player, String reason) {
+        REJECTION_LOGGER.lErr(LOGGER, "Rejected teleport request of {}: {}", player, reason);
+        if (player.getRemovalReason() == null) {
+            resyncRejectedPlayer(player);
+        }
+    }
+
+    private static void resyncRejectedPlayer(ServerPlayer player) {
+        teleportEntityGeneral(player, player.position(), ((ServerLevel) player.level()));
+        ScaleUtils.setBaseScale(player, ScaleUtils.getBaseScale(player));
+        GravityChangerInterface.invoker.setBaseGravityDirectionServer(
+            player, GravityChangerInterface.invoker.getGravityDirection(player)
+        );
     }
     
     private @Nullable Portal findPortal(
@@ -269,32 +294,18 @@ public class ServerTeleportationManager {
         Vec3 posBefore,
         Portal portal
     ) {
-        if (player.getVehicle() != null) {
-            return null;
-        }
-        
-        // cannot teleport if having awaiting teleport
-        if (((IEServerPlayNetworkHandler) player.connection).ip_hasAwaitingTeleport()) {
-            return "has awaiting teleport";
-        }
-        
-        if (!portal.canTeleportEntity(player)) {
-            return "portal cannot teleport player";
-        }
-        
-        if (player.level().dimension() != dimensionBefore) {
-            return "player is not in the dimensionBefore in packet";
-        }
-        
-        if (player.position().distanceToSqr(posBefore) > 16 * 16) {
-            return "player is too far from the posBefore in packet";
-        }
-        
-        if (portal.getDistanceToNearestPointInPortal(posBefore) > 20) {
-            return "posBefore is too far from portal";
-        }
-        
-        return null;
+        // Mounted players are validated like everyone else. Before the 26.3 port a player with a
+        // vehicle skipped every check, which let a client teleport through any portal from anywhere.
+        boolean posFinite = Double.isFinite(posBefore.x) && Double.isFinite(posBefore.y) && Double.isFinite(posBefore.z);
+        return TeleportRequestCheck.getRejectReason(new TeleportRequestCheck.Facts(
+            posFinite,
+            ((IEServerPlayNetworkHandler) player.connection).ip_hasAwaitingTeleport(),
+            player.level().dimension() == dimensionBefore,
+            portal.canTeleportEntity(player),
+            player.getVehicle() != null,
+            posFinite ? player.position().distanceTo(posBefore) : Double.NaN,
+            posFinite ? portal.getDistanceToNearestPointInPortal(posBefore) : Double.NaN
+        ));
     }
     
     public static boolean canPlayerReachPos(

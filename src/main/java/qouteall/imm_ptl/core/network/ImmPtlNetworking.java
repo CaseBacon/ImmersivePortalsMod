@@ -1,5 +1,7 @@
 package qouteall.imm_ptl.core.network;
 
+import qouteall.q_misc_util.dimension.DimensionIntId;
+import net.minecraft.server.MinecraftServer;
 import com.mojang.logging.LogUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -76,11 +78,17 @@ public class ImmPtlNetworking {
         }
         
         public void handle(ServerPlayer player) {
-            ResourceKey<Level> dim = PortalAPI.serverIntToDimKey(
-                player.level().getServer(), dimensionId
-            );
-            
-            ServerTeleportationManager.of(player.level().getServer()).onPlayerTeleportedInClient(
+            MinecraftServer server = player.level().getServer();
+            ResourceKey<Level> dim = DimensionIntId.getServerMap(server).fromIntegerIdNullable(dimensionId);
+
+            if (dim == null) {
+                ServerTeleportationManager.of(server).onInvalidTeleportRequest(
+                    player, "unknown dimension id " + dimensionId
+                );
+                return;
+            }
+
+            ServerTeleportationManager.of(server).onPlayerTeleportedInClient(
                 player, dim, eyePosBeforeTeleportation, portalId
             );
         }
