@@ -9,6 +9,7 @@ import net.minecraft.world.entity.EntityType;
 import qouteall.imm_ptl.core.IPModMainClient;
 import qouteall.imm_ptl.core.compat.IPModInfoChecking;
 import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
+import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterfaceOnPresent;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterfaceOnPresent;
 import qouteall.imm_ptl.core.portal.BreakableMirror;
@@ -70,10 +71,11 @@ public class IPModEntryClient implements ClientModInitializer {
             Helper.log("Sodium is present");
             SodiumInterface.invoker = new SodiumInterfaceOnPresent();
         }
-        // PORT(26.3): the Iris integration is quarantined and fabric.mod.json declares Iris as incompatible,
-        // so the no-op IrisInterface invoker stays installed. IrisInterfaceOnPresent is kept for the Iris phase.
         if (FabricLoader.getInstance().isModLoaded("iris")) {
-            Helper.err("Iris is present, but Iris compatibility is not ported to 26.3 yet");
+            Helper.log("Iris is present");
+            // PORT(26.3): the shader-pack portal renderers (IrisPortalRenderer and friends) are quarantined with
+            // the old renderer; while a shader pack is in use, portal views are not drawn
+            IrisInterface.invoker = new IrisInterfaceOnPresent();
         }
         
         IPModInfoChecking.initClient();

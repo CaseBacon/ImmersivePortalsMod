@@ -1,61 +1,35 @@
 package qouteall.imm_ptl.core.compat.iris_compatibility;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.irisshaders.iris.Iris;
-import net.irisshaders.iris.pipeline.WorldRenderingPipeline;
-import net.irisshaders.iris.shadows.ShadowRenderer;
-import net.minecraft.client.renderer.LevelRenderer;
-import org.jetbrains.annotations.Nullable;
-import qouteall.q_misc_util.Helper;
-import java.lang.reflect.Field;
+import net.irisshaders.iris.api.v0.IrisApi;
+import org.jspecify.annotations.Nullable;
 
+/**
+ * Only loaded when Iris is present. Uses Iris' API and its public static state only (no mixins into Iris).
+ */
+@Environment(EnvType.CLIENT)
 public class IrisInterfaceOnPresent extends IrisInterface.Invoker {
-    
-    private Field worldRendererPipelineField = Helper.noError(() -> {
-        Field field = LevelRenderer.class.getDeclaredField("pipeline");
-        field.setAccessible(true);
-        return field;
-    });
-    
+
     @Override
     public boolean isIrisPresent() {
         return true;
     }
-    
+
     @Override
     public boolean isShaders() {
+        // the loaded pack; IrisApi.isShaderPackInUse depends on the pipeline of the last rendered dimension
         return Iris.getCurrentPack().isPresent();
     }
-    
+
     @Override
     public boolean isRenderingShadowMap() {
-        return ShadowRenderer.ACTIVE;
-    }
-    
-    @Override
-    public Object getPipeline(LevelRenderer worldRenderer) {
-        return Helper.noError(() ->
-            ((WorldRenderingPipeline) worldRendererPipelineField.get(worldRenderer))
-        );
-    }
-    
-    // the pipeline switching is unnecessary when using shaders
-    // but still necessary with shaders disabled
-    @Override
-    public void setPipeline(LevelRenderer worldRenderer, Object pipeline) {
-        Helper.noError(() -> {
-            worldRendererPipelineField.set(worldRenderer, pipeline);
-            return null;
-        });
-    }
-    
-    @Override
-    public void reloadPipelines() {
-        Iris.getPipelineManager().destroyPipeline();
+        return IrisApi.getInstance().isRenderingShadowPass();
     }
 
-    @Nullable
     @Override
-    public String getShaderpackName() {
-        return Iris.getCurrentPackName();
+    public @Nullable String getShaderpackName() {
+        return isShaders() ? Iris.getCurrentPackName() : null;
     }
 }

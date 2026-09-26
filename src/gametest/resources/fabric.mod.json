@@ -13,7 +13,8 @@
     ],
     "fabric-client-gametest": [
       "qouteall.imm_ptl.gametest.ClientPortalTests",
-      "qouteall.imm_ptl.gametest.DedicatedServerPortalTests"
+      "qouteall.imm_ptl.gametest.DedicatedServerPortalTests",
+      "qouteall.imm_ptl.gametest.IrisShaderPackTests"
     ]
   },
   "mixins": [

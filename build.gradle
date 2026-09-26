@@ -90,6 +90,7 @@ def portQuarantine = [
 // files inside quarantined directories that are already ported
 def portQuarantineKeep = [
     'qouteall/imm_ptl/core/compat/iris_compatibility/IrisInterface.java',
+    'qouteall/imm_ptl/core/compat/iris_compatibility/IrisInterfaceOnPresent.java',
     // render state and math classes (no GPU calls) are ported first
     'qouteall/imm_ptl/core/render/context_management/RenderStates.java',
     'qouteall/imm_ptl/core/render/context_management/PortalRendering.java',
