@@ -1,46 +1,46 @@
 {
-	"schemaVersion": 1,
-	"id": "dimlib",
-	"version": "${version}",
-	"name": "DimLib",
-	"description": "Adds the functionality of dynamically adding and removing dimensions.\nAlso allow disabling 'Experimental Settings not supported' warning screen.",
-	"authors": [
-		"qouteall"
-	],
-	"contact": {
-		"homepage": "https://github.com/iPortalTeam/DimLib",
-		"sources": "https://github.com/iPortalTeam/DimLib",
-		"issues": "https://github.com/iPortalTeam/DimLib/issues"
-	},
-	"license": "CC0-1.0",
-	"icon": "assets/dimlib/icon.png",
-	"environment": "*",
-	"entrypoints": {
-		"main": [
-          "qouteall.dimlib.DimLibEntry"
-		],
-		"client": [
-			"qouteall.dimlib.DimLibEntryClient"
-		],
-		"modmenu": [
-			"qouteall.dimlib.config.DimLibModmenuIntegration"
-		]
-	},
-	"mixins": [
-		"dimlib.mixins.json"
-	],
-	"depends": {
-		"fabricloader": ">=0.15.0",
-		"minecraft": ["1.21.3"],
-		"java": ">=17",
-		"fabric-api": "*"
-	},
-	"suggests": {
-
-	},
-	"custom": {
-		"modmenu": {
-			"badges": ["library"]
-		}
-	}
+  "schemaVersion": 1,
+  "id": "dimlib",
+  "version": "${version}",
+  "name": "DimLib",
+  "description": "Adds the functionality of dynamically adding and removing dimensions.\nAlso allow disabling 'Experimental Settings not supported' warning screen.",
+  "authors": [
+    "qouteall"
+  ],
+  "contact": {
+    "homepage": "https://github.com/iPortalTeam/DimLib",
+    "sources": "https://github.com/iPortalTeam/DimLib",
+    "issues": "https://github.com/iPortalTeam/DimLib/issues"
+  },
+  "license": "CC0-1.0",
+  "icon": "assets/dimlib/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "qouteall.dimlib.DimLibEntry"
+    ],
+    "client": [
+      "qouteall.dimlib.DimLibEntryClient"
+    ],
+    "modmenu": [
+      "qouteall.dimlib.config.DimLibModmenuIntegration"
+    ]
+  },
+  "mixins": [
+    "dimlib.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "suggests": {},
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  }
 }

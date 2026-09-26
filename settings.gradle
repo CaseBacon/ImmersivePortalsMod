@@ -4,20 +4,18 @@ pluginManagement {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
+        mavenCentral()
         gradlePluginPortal()
-//        mavenLocal()
-        maven {
-            name = 'JitPack'
-            url = 'https://jitpack.io'
-        }
     }
-
-//    resolutionStrategy {
-//        eachPlugin {
-//            // use qouteall's fork of fabric loom
-//            if (requested.id.toString() == "fabric-loom") {
-//                useModule("com.github.qouteall.fabric-loom:fabric-loom:dev~1.3-SNAPSHOT")
-//            }
-//        }
-//    }
 }
+
+plugins {
+    // provisions the Java 25 toolchain into the Gradle user home when no local JDK 25 exists
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'immersive-portals'
+
+// DimLib is maintained here as a separate Fabric mod (own mod id, entrypoints and license)
+// and nested into the Immersive Portals jar. See dimlib/PORTING.md.
+include 'dimlib'

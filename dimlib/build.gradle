@@ -1,0 +1,35 @@
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+version = project.dimlib_mod_version + "+mc" + project.minecraft_version
+group = "qouteall.dimlib"
+
+base {
+    archivesName = "dimlib"
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    implementation "maven.modrinth:midnightlib:${project.midnightlib_version}"
+    include "maven.modrinth:midnightlib:${project.midnightlib_version}"
+
+    compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+}
+
+processResources {
+    def version = project.version
+    inputs.property "version", version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": version
+    }
+}
+
+jar {
+    from("LICENSE")
+}
