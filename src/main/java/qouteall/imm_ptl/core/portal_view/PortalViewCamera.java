@@ -9,9 +9,10 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import qouteall.imm_ptl.core.mixin.client.portal_view.CameraAccessor;
 import qouteall.imm_ptl.core.portal.Portal;
-import qouteall.q_misc_util.my_util.DQuaternion;
 
 /**
  * The camera of a portal view: the main camera transformed by the portal.
@@ -39,15 +40,22 @@ public final class PortalViewCamera extends Camera {
 
         Vec3 position = portal.transformPoint(mainCamera.position());
 
-        DQuaternion rotation = portal.getRotationD();
-        Vec3 forward = rotation.rotate(new Vec3(mainCamera.forwardVector()));
+        // the portal rotation is applied in world space, after the main camera's rotation
+        Quaternionf rotation = portal.getRotationD().toMcQuaternion().mul(mainCamera.rotation(), new Quaternionf());
+        Vector3f forward = rotation.transform(new Vector3f(0, 0, -1));
         // Minecraft: forward = (-sin(yaw) cos(pitch), -sin(pitch), cos(yaw) cos(pitch)), angles in degrees
         float yRot = (float) Math.toDegrees(Math.atan2(-forward.x, forward.z));
         float xRot = (float) Math.toDegrees(Math.asin(Mth.clamp(-forward.y, -1.0, 1.0)));
 
         setLevel(destLevel);
         setPosition(position);
+        // yaw and pitch for code that reads them, then the exact rotation, which also keeps a roll
+        // (setRotation marks the cached view matrices dirty; they are derived from rotation() lazily)
         setRotation(yRot, xRot);
+        rotation().set(rotation);
+        rotation.transform(0, 0, -1, self.ip_getForwards());
+        rotation.transform(0, 1, 0, self.ip_getUp());
+        rotation.transform(-1, 0, 0, self.ip_getLeft());
 
         self.ip_prepareCullFrustum(
             getViewRotationMatrix(new Matrix4f()), self.ip_createProjectionMatrixForCulling(), position

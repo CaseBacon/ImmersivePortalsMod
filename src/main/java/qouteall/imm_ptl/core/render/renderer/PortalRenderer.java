@@ -327,7 +327,7 @@ public abstract class PortalRenderer {
             LOGGER.warn(
                 "The stencil and framebuffer portal renderers are not ported to Minecraft 26.3. "
                     + "Portals into other dimensions are drawn by the PortalViewRenderer prototype "
-                    + "(one layer, no same-dimension portals)."
+                    + "(one portal layer, no mirrors)."
             );
         }
         switchRenderer(IPCGlobal.rendererDummy);

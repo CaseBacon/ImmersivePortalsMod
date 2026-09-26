@@ -1,5 +1,6 @@
 package qouteall.imm_ptl.gametest;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
@@ -8,6 +9,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ARGB;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -16,7 +18,13 @@ import net.minecraft.world.phys.Vec3;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal_view.PortalViewRenderer;
+import qouteall.q_misc_util.my_util.DQuaternion;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 /**
@@ -120,6 +128,23 @@ public class ClientPortalTests implements FabricClientGameTest {
                 context.computeOnClient(mc -> mc.level.dimension() == Level.OVERWORLD),
                 "loading the nether client world must not change the current client world"
             );
+            int farCenter = centerPixel(context.takeScreenshot("imm_ptl_01c_portal_center"));
+            check(isGold(farCenter), "the gold wall is not in the middle of the portal view: " + describe(farCenter));
+
+            // with the eye 0.03 blocks in front of the portal, all of the portal is closer than the near plane (0.05)
+            singleplayer.getServer().runCommand("tp @a 0.5 " + surfaceY + " -2.47 180 0");
+            connection.waitForClientboundPackets();
+            context.waitTicks(5);
+            check(
+                context.computeOnClient(mc -> mc.level.dimension() == Level.OVERWORLD),
+                "standing in front of the portal must not teleport"
+            );
+            int closeCenter = centerPixel(context.takeScreenshot("imm_ptl_01d_close_to_portal"));
+            check(isGold(closeCenter), "right in front of the portal, the middle of the screen is not the gold wall: "
+                + describe(closeCenter));
+            singleplayer.getServer().runCommand("tp @a 0.5 " + surfaceY + " 0.5 180 0");
+            connection.waitForClientboundPackets();
+            context.waitTicks(5);
 
             // walk through the portal
             context.getInput().holdKeyFor(options -> options.keyUp, 40);
@@ -178,6 +203,17 @@ public class ClientPortalTests implements FabricClientGameTest {
             context.getInput().lookAt(90, 20);
             context.waitTicks(20);
             context.takeScreenshot("imm_ptl_06_looking_away");
+
+            // a portal that also rolls the view: rotated by 90 degrees around its normal
+            singleplayer.getServer().runOnServer(server -> {
+                Portal portal = (Portal) server.overworld().getEntity(sameDimensionPortalId);
+                portal.setRotationTransformation(DQuaternion.rotationByDegrees(new Vec3(0, 0, 1), 90));
+                portal.reloadAndSyncToClient();
+            });
+            context.getInput().lookAt(180, 0);
+            connection.waitForClientboundPackets();
+            context.waitTicks(20);
+            context.takeScreenshot("imm_ptl_07_rolled_portal");
         }
 
         // leaving the world disposes all client worlds
@@ -209,6 +245,26 @@ public class ClientPortalTests implements FabricClientGameTest {
         }
     }
     
+    private static int centerPixel(Path screenshot) {
+        try (InputStream in = Files.newInputStream(screenshot); NativeImage image = NativeImage.read(in)) {
+            // next to the crosshair
+            return image.getPixel(image.getWidth() / 2 + image.getWidth() / 16, image.getHeight() / 2);
+        }
+        catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    // the lit gold block wall of the nether test room
+    private static boolean isGold(int argb) {
+        int r = ARGB.red(argb), g = ARGB.green(argb), b = ARGB.blue(argb);
+        return r > 150 && g > 100 && b < r * 0.6;
+    }
+
+    private static String describe(int argb) {
+        return "rgb(%d, %d, %d)".formatted(ARGB.red(argb), ARGB.green(argb), ARGB.blue(argb));
+    }
+
     private static Entity findEntity(ClientLevel level, UUID uuid) {
         for (Entity entity : level.entitiesForRendering()) {
             if (entity.getUUID().equals(uuid)) {

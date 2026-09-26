@@ -4,6 +4,7 @@ import net.minecraft.client.Camera;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
@@ -34,6 +35,16 @@ public interface CameraAccessor {
     
     @Accessor("eyeHeightOld")
     void ip_setEyeHeightOld(float value);
+    
+    // the direction vectors that setRotation derives from yaw and pitch (mutable, final fields)
+    @Accessor("forwards")
+    Vector3f ip_getForwards();
+    
+    @Accessor("up")
+    Vector3f ip_getUp();
+    
+    @Accessor("left")
+    Vector3f ip_getLeft();
     
     @Invoker("prepareCullFrustum")
     void ip_prepareCullFrustum(Matrix4fc modelViewMatrix, Matrix4f projectionMatrixForCulling, Vec3 cameraPos);

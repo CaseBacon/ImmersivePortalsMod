@@ -16,11 +16,13 @@ import com.mojang.renderpearl.api.pipeline.DepthStencilState;
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.textures.FilterMode;
+import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import net.minecraft.client.TextureFilteringMethod;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BindGroupLayouts;
@@ -41,7 +43,8 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
-import org.lwjgl.system.MemoryStack;
+import org.jspecify.annotations.Nullable;
+import org.lwjgl.system.MemoryUtil;
 import org.slf4j.Logger;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
@@ -50,10 +53,13 @@ import qouteall.imm_ptl.core.chunk_loading.ImmPtlClientChunkMap;
 import qouteall.imm_ptl.core.mixin.client.portal_view.GameRendererAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelExtractorAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelRendererAccessor;
+import qouteall.imm_ptl.core.portal.Mirror;
 import qouteall.imm_ptl.core.portal.Portal;
 import qouteall.imm_ptl.core.portal.global_portals.GlobalPortalStorage;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -79,7 +85,7 @@ import java.util.UUID;
  * </ul>
  * Everything goes through the GPU abstraction, so it runs on OpenGL and Vulkan.
  * <p>
- * Limits of the prototype: one portal layer, at most {@link #MAX_VIEWS} views per frame, flat portals only.
+ * Limits of the prototype: one portal layer, at most {@link #MAX_VIEWS} views per frame, no mirrors.
  * A same-dimension view reuses the level's renderer with a second camera in the same frame.
  */
 @Environment(EnvType.CLIENT)
@@ -100,11 +106,25 @@ public final class PortalViewRenderer {
         .withColorTargetState(ColorTargetState.DEFAULT)
         .withCull(false)
         .withVertexBinding(0, DefaultVertexFormat.POSITION)
-        .withPrimitiveTopology(PrimitiveTopology.QUADS)
+        .withPrimitiveTopology(PrimitiveTopology.TRIANGLES)
         .withDepthStencilState(new DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, true))
         .build();
 
-    private static final int QUAD_VERTEX_BYTES = 4 * 3 * Float.BYTES;
+    private static final int VERTEX_BYTES = 3 * Float.BYTES;
+
+    /**
+     * Within this distance of the portal, the portal area is drawn projected onto a plane just beyond the near
+     * plane ({@link PortalAreaMesh#addCloseProjectedTriangle}). Occlusion by things between the camera and the
+     * portal is ignored then, which is fine at this distance.
+     */
+    private static final double CLOSE_DISTANCE = 0.3;
+    private static final float CLOSE_PROJECTION_DEPTH = Camera.PROJECTION_Z_NEAR * 1.2f;
+
+    /**
+     * The destination plane is kept at least this far away from the destination camera, so that the oblique
+     * near plane never passes through the camera.
+     */
+    private static final float MIN_CLIP_PLANE_DISTANCE = 0.005f;
 
     private static final class View implements AutoCloseable {
         final LevelRenderState state = new LevelRenderState();
@@ -112,9 +132,7 @@ public final class PortalViewRenderer {
         final FogRenderer fogRenderer = new FogRenderer();
         final ProjectionMatrixBuffer projectionBuffer = new ProjectionMatrixBuffer("immersive_portals portal view");
         final GlobalSettingsUniform globals = new GlobalSettingsUniform();
-        final GpuBuffer quadBuffer = RenderSystem.getDevice().createBuffer(
-            () -> "immersive_portals portal view quad", GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST, QUAD_VERTEX_BYTES
-        );
+        GpuBuffer areaBuffer;
         TextureTarget target;
         Portal portal;
         long lastUsedFrame;
@@ -130,12 +148,27 @@ public final class PortalViewRenderer {
             }
         }
 
+        GpuBuffer ensureAreaBuffer(int bytes) {
+            if (areaBuffer == null || areaBuffer.size() < bytes) {
+                if (areaBuffer != null) {
+                    areaBuffer.close();
+                }
+                areaBuffer = RenderSystem.getDevice().createBuffer(
+                    () -> "immersive_portals portal view area", GpuBuffer.USAGE_VERTEX | GpuBuffer.USAGE_COPY_DST,
+                    Math.max(bytes, 6 * VERTEX_BYTES)
+                );
+            }
+            return areaBuffer;
+        }
+
         @Override
         public void close() {
             fogRenderer.close();
             projectionBuffer.close();
             globals.close();
-            quadBuffer.close();
+            if (areaBuffer != null) {
+                areaBuffer.close();
+            }
             if (target != null) {
                 target.destroyBuffers();
             }
@@ -225,6 +258,8 @@ public final class PortalViewRenderer {
         result.addAll(GlobalPortalStorage.getGlobalPortals(level));
 
         result.removeIf(portal -> !portal.isPortalValid()
+            // a reflection cannot be expressed by a camera rotation (and it flips the face culling)
+            || portal instanceof Mirror
             || !portal.isVisible()
             || !portal.isRoughlyVisibleTo(cameraPos)
             || portal.getDistanceToNearestPointInPortal(cameraPos) > range
@@ -287,7 +322,9 @@ public final class PortalViewRenderer {
         Vector3f normal = cameraState.viewRotationMatrix.transformDirection(new Vector3f(
             (float) contentDirection.x, (float) contentDirection.y, (float) contentDirection.z
         ));
-        return new Vector4f(normal.x, normal.y, normal.z, (float) -contentDirection.dot(toPlane));
+        // the camera is on the clipped side (plane value < 0); keep it a small distance away from the plane
+        float d = Math.min((float) -contentDirection.dot(toPlane), -MIN_CLIP_PLANE_DISTANCE);
+        return new Vector4f(normal.x, normal.y, normal.z, d);
     }
 
     private static void releaseExpiredViews() {
@@ -347,7 +384,7 @@ public final class PortalViewRenderer {
 
         CameraRenderState mainCamera = gameRenderState.levelRenderState.cameraRenderState;
         for (View view : drawnViews) {
-            drawPortalQuad(view, mainTarget, mainCamera);
+            drawPortalArea(view, mainTarget, mainCamera);
         }
     }
 
@@ -376,6 +413,12 @@ public final class PortalViewRenderer {
             gameRenderState.optionsRenderState.textureFiltering == TextureFilteringMethod.RGSS
         );
 
+        // The clouds' uniform buffer is written by every LevelRenderer.render call and rotated once per frame
+        // (LevelRenderer.endFrame, which vanilla only calls for the player's level renderer). A draw recorded
+        // earlier in this frame by the same level renderer must keep its data, so this draw gets the next
+        // (fenced) buffer.
+        levelRenderer.endFrame();
+
         LevelRendererAccessor levelRendererAccess = (LevelRendererAccessor) levelRenderer;
         LevelRenderState originalState = levelRendererAccess.ip_getLevelRenderState();
         levelRendererAccess.ip_setLevelRenderState(view.state);
@@ -398,45 +441,63 @@ public final class PortalViewRenderer {
         }
         
         if (debugDumpPath != null) {
-            java.nio.file.Path path = debugDumpPath;
+            Path path = debugDumpPath;
             debugDumpPath = null;
-            net.minecraft.client.Screenshot.takeScreenshot(view.target, image -> {
+            Screenshot.takeScreenshot(view.target, image -> {
                 try (image) {
                     image.writeToFile(path);
                     LOGGER.info("Saved portal view to {}", path);
                 }
-                catch (java.io.IOException e) {
+                catch (IOException e) {
                     LOGGER.error("Failed to save portal view", e);
                 }
             });
         }
     }
 
-    private static void drawPortalQuad(View view, RenderTarget mainTarget, CameraRenderState mainCamera) {
+    private static void drawPortalArea(View view, RenderTarget mainTarget, CameraRenderState mainCamera) {
         Portal portal = view.portal;
-        Vec3 center = portal.getOriginPos().subtract(mainCamera.pos);
-        Vec3 halfW = portal.getAxisW().scale(portal.getWidth() / 2);
-        Vec3 halfH = portal.getAxisH().scale(portal.getHeight() / 2);
-        Vec3[] corners = {
-            center.subtract(halfW).subtract(halfH),
-            center.add(halfW).subtract(halfH),
-            center.add(halfW).add(halfH),
-            center.subtract(halfW).add(halfH)
-        };
+        Matrix4f viewRotation = mainCamera.viewRotationMatrix;
+        boolean close = portal.getDistanceToNearestPointInPortal(mainCamera.pos) < CLOSE_DISTANCE;
 
-        try (MemoryStack stack = MemoryStack.stackPush()) {
-            ByteBuffer data = stack.malloc(QUAD_VERTEX_BYTES);
-            for (Vec3 corner : corners) {
-                data.putFloat((float) corner.x).putFloat((float) corner.y).putFloat((float) corner.z);
+        // the portal's view area (the shape of the portal) as triangles in view space
+        PortalAreaMesh mesh = PortalAreaMesh.create();
+        portal.renderViewAreaMesh(
+            portal.getOriginPos().subtract(mainCamera.pos),
+            (x0, y0, z0, x1, y1, z1, x2, y2, z2) -> {
+                Vector3f p0 = viewRotation.transformPosition((float) x0, (float) y0, (float) z0, new Vector3f());
+                Vector3f p1 = viewRotation.transformPosition((float) x1, (float) y1, (float) z1, new Vector3f());
+                Vector3f p2 = viewRotation.transformPosition((float) x2, (float) y2, (float) z2, new Vector3f());
+                if (close) {
+                    mesh.addCloseProjectedTriangle(p0, p1, p2, CLOSE_PROJECTION_DEPTH);
+                }
+                else {
+                    mesh.addTriangle(p0, p1, p2);
+                }
             }
-            data.flip();
-            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(view.quadBuffer.slice(), data);
+        );
+        int vertexCount = mesh.vertexCount();
+        FloatArrayList vertices = mesh.floats();
+        if (vertexCount == 0) {
+            return;
         }
 
-        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms()
-            .writeTransform(new Matrix4f(mainCamera.viewRotationMatrix));
-        RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
-        GpuBuffer indexBuffer = indices.getBuffer(6);
+        int bytes = vertexCount * VERTEX_BYTES;
+        GpuBuffer areaBuffer = view.ensureAreaBuffer(bytes);
+        ByteBuffer data = MemoryUtil.memAlloc(bytes);
+        try {
+            for (int i = 0; i < vertices.size(); i++) {
+                data.putFloat(vertices.getFloat(i));
+            }
+            data.flip();
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(areaBuffer.slice(0, bytes), data);
+        }
+        finally {
+            MemoryUtil.memFree(data);
+        }
+
+        // the vertices are already in view space
+        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f());
 
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
             () -> "immersive_portals portal view",
@@ -450,22 +511,21 @@ public final class PortalViewRenderer {
                 "Sampler0", view.target.getColorTextureView(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST)
             );
-            pass.setVertexBuffer(0, view.quadBuffer.slice());
-            pass.setIndexBuffer(indexBuffer, indices.type());
-            pass.drawIndexed(6, 1, 0, 0, 0);
+            pass.setVertexBuffer(0, areaBuffer.slice(0, bytes));
+            pass.draw(vertexCount, 1, 0, 0);
         }
     }
 
-    private static java.nio.file.Path debugDumpPath = null;
-    
+    private static @Nullable Path debugDumpPath = null;
+
     /**
      * Debugging: save the offscreen target of the next rendered view as a PNG.
      */
-    public static void debugDumpNextView(java.nio.file.Path path) {
+    public static void debugDumpNextView(Path path) {
         debugDumpPath = path;
     }
-    
-        /**
+
+    /**
      * The number of portal views drawn in the current frame (debug text).
      */
     public static int getViewCountThisFrame() {
