@@ -79,6 +79,8 @@
     "client.MixinGlDebug",
     "client.MixinEntity_Interpolation",
     "client.MixinMinecraft",
+    "client.MixinMinecraft_Frame",
+    "client.MixinGameRenderer_MultiWorld",
     "client.MixinGui_InitialScreen",
     "client.accessor.IEClientLevel_Accessor",
     "client.accessor.IEClientLevelData",
