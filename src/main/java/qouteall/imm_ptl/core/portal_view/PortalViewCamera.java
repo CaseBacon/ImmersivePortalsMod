@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
+import org.jspecify.annotations.Nullable;
 import qouteall.imm_ptl.core.mixin.client.portal_view.CameraAccessor;
 import qouteall.imm_ptl.core.portal.Portal;
 
@@ -20,6 +21,9 @@ import qouteall.imm_ptl.core.portal.Portal;
  */
 @Environment(EnvType.CLIENT)
 public final class PortalViewCamera extends Camera {
+
+    private @Nullable ClientLevel probeLevel;
+    private long lastProbeTick = Long.MIN_VALUE;
 
     public void setupFor(
         Camera mainCamera, Portal portal, ClientLevel mainLevel, ClientLevel destLevel,
@@ -56,6 +60,23 @@ public final class PortalViewCamera extends Camera {
         rotation.transform(0, 0, -1, self.ip_getForwards());
         rotation.transform(0, 1, 0, self.ip_getUp());
         rotation.transform(-1, 0, 0, self.ip_getLeft());
+
+        // Sky colour, sun angle, fog and the like are read from the camera's environment attribute probe, which
+        // Camera.tick() updates once per client tick for the main camera; this camera is never ticked
+        long tick = mainLevel.getGameTime();
+        if (probeLevel != destLevel) {
+            attributeProbe().reset();
+            probeLevel = destLevel;
+            lastProbeTick = Long.MIN_VALUE;
+        }
+        if (tick != lastProbeTick) {
+            lastProbeTick = tick;
+            attributeProbe().tick(destLevel, position);
+        }
+
+        // Not the player's own first-person view: Iris does not draw the hand into a detached camera's image,
+        // and a same-dimension view shows the player's body like any other entity.
+        self.ip_setDetached(true);
 
         self.ip_prepareCullFrustum(
             getViewRotationMatrix(new Matrix4f()), self.ip_createProjectionMatrixForCulling(), position

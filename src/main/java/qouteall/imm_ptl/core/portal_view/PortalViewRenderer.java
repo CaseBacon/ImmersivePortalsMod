@@ -37,8 +37,6 @@ import net.minecraft.client.renderer.fog.FogRenderer;
 import net.minecraft.client.renderer.state.GameRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
@@ -54,8 +52,6 @@ import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.chunk_loading.ImmPtlClientChunkMap;
-import qouteall.imm_ptl.core.CHelper;
-import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.mixin.client.portal_view.GameRendererAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelExtractorAccessor;
@@ -195,32 +191,7 @@ public final class PortalViewRenderer {
     }
 
     public static boolean isEnabled() {
-        return IPGlobal.renderMode == IPGlobal.RenderMode.normal && !isBlockedByShaders();
-    }
-
-    private static boolean shadersWarned = false;
-
-    /**
-     * With an Iris shader pack in use, a level is rendered through Iris' pipeline (its own targets, a shadow pass
-     * and camera uniforms from the main camera), which a portal view cannot drive yet.
-     */
-    private static boolean isBlockedByShaders() {
-        if (!IrisInterface.invoker.isShaders()) {
-            shadersWarned = false;
-            return false;
-        }
-        if (!shadersWarned) {
-            shadersWarned = true;
-            LOGGER.warn("A shader pack is in use; portal views are not drawn");
-            if (Minecraft.getInstance().player != null) {
-                CHelper.printChat(Component.translatable("imm_ptl.shaders_no_portal_views").withStyle(ChatFormatting.RED));
-            }
-            else {
-                // show it once the player is in a world
-                shadersWarned = false;
-            }
-        }
-        return true;
+        return IPGlobal.renderMode == IPGlobal.RenderMode.normal;
     }
 
     private static void cleanup() {
@@ -481,6 +452,10 @@ public final class PortalViewRenderer {
         LevelRenderState originalState = levelRendererAccess.ip_getLevelRenderState();
         levelRendererAccess.ip_setLevelRenderState(view.state);
         gameRendererAccess.ip_setMainRenderTarget(view.target);
+        // Iris (with a shader pack) takes the camera of its uniforms, sky and shadow pass from
+        // GameRenderer.mainCamera(); vanilla does not read it while drawing a level
+        Camera mainCamera = gameRendererAccess.ip_getMainCamera();
+        gameRendererAccess.ip_setMainCamera(view.camera);
         Runnable render = () -> levelRenderer.render(
             gameRendererAccess.ip_getResourcePool(), false, cameraState,
             terrainFog, cameraState.fogData.color, true, false
@@ -495,6 +470,7 @@ public final class PortalViewRenderer {
             }
         }
         finally {
+            gameRendererAccess.ip_setMainCamera(mainCamera);
             levelRendererAccess.ip_setLevelRenderState(originalState);
             view.fogRenderer.endFrame();
             if (previousTerrainProjection != null) {

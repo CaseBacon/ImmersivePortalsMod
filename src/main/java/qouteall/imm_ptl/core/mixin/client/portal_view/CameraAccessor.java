@@ -46,6 +46,10 @@ public interface CameraAccessor {
     @Accessor("left")
     Vector3f ip_getLeft();
     
+    // a portal view camera is always "detached": the camera entity is not the viewer's body in the view
+    @Accessor("detached")
+    void ip_setDetached(boolean detached);
+
     @Invoker("prepareCullFrustum")
     void ip_prepareCullFrustum(Matrix4fc modelViewMatrix, Matrix4f projectionMatrixForCulling, Vec3 cameraPos);
     

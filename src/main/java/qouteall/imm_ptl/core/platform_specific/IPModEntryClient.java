@@ -73,8 +73,8 @@ public class IPModEntryClient implements ClientModInitializer {
         }
         if (FabricLoader.getInstance().isModLoaded("iris")) {
             Helper.log("Iris is present");
-            // PORT(26.3): the shader-pack portal renderers (IrisPortalRenderer and friends) are quarantined with
-            // the old renderer; while a shader pack is in use, portal views are not drawn
+            // PORT(26.3): the shader-pack portal renderers of the old renderer (IrisPortalRenderer and friends) stay
+            // quarantined; PortalViewRenderer draws portal views through Iris' own pipeline instead
             IrisInterface.invoker = new IrisInterfaceOnPresent();
         }
         

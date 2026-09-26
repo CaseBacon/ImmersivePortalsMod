@@ -8,8 +8,9 @@ import org.jspecify.annotations.Nullable;
  * Everything Immersive Portals needs from Iris. The default invoker is used when Iris is absent;
  * {@link IrisInterfaceOnPresent} (the only active class that references Iris) is installed when it is loaded.
  * <p>
- * With a shader pack in use, Iris renders each level with its own targets, shadow pass and camera uniforms
- * taken from the main camera, so portal views are not drawn then (see {@code PortalViewRenderer}).
+ * With a shader pack in use, Iris renders every {@code LevelRenderer.render} call through the pipeline of the
+ * current dimension and takes its camera from {@code GameRenderer.mainCamera()}; {@code PortalViewRenderer} sets
+ * both up for a portal view (see "Iris" in docs/26.3-port-progress.md).
  */
 @Environment(EnvType.CLIENT)
 public class IrisInterface {
