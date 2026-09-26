@@ -73,6 +73,24 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
     private final LongOpenHashSet[] removedLoadedChunksSets = {new LongOpenHashSet(), new LongOpenHashSet()};
     private int updatingSetsIndex = 0;
     
+    /**
+     * While a portal view re-extracts a level that was already extracted this frame (same-dimension
+     * portal), the chunk deltas must stay for the main render state, which has not consumed them yet.
+     */
+    private static boolean suppressTrackingSetConsumption = false;
+    private static final LongOpenHashSet EMPTY_SET = new LongOpenHashSet();
+    
+    public static void withoutTrackingSetConsumption(Runnable runnable) {
+        boolean old = suppressTrackingSetConsumption;
+        suppressTrackingSetConsumption = true;
+        try {
+            runnable.run();
+        }
+        finally {
+            suppressTrackingSetConsumption = old;
+        }
+    }
+    
     public ImmPtlClientChunkMap(ClientLevel clientWorld, int loadDistance) {
         super(clientWorld, 1);
         // the chunk array is unused. make it small by passing 1 as load distance to super constructor
@@ -260,27 +278,46 @@ public class ImmPtlClientChunkMap extends ClientChunkCache {
 
     @Override
     public LongOpenHashSet addedEmptySections() {
+        if (suppressTrackingSetConsumption) {
+            EMPTY_SET.clear();
+            return EMPTY_SET;
+        }
         return addedEmptySectionsSets[updatingSetsIndex];
     }
 
     @Override
     public LongOpenHashSet removedEmptySections() {
+        if (suppressTrackingSetConsumption) {
+            EMPTY_SET.clear();
+            return EMPTY_SET;
+        }
         return removedEmptySectionsSets[updatingSetsIndex];
     }
 
     @Override
     public LongOpenHashSet addedLoadedChunks() {
+        if (suppressTrackingSetConsumption) {
+            EMPTY_SET.clear();
+            return EMPTY_SET;
+        }
         return addedLoadedChunksSets[updatingSetsIndex];
     }
 
     @Override
     public LongOpenHashSet removedLoadedChunks() {
+        if (suppressTrackingSetConsumption) {
+            EMPTY_SET.clear();
+            return EMPTY_SET;
+        }
         return removedLoadedChunksSets[updatingSetsIndex];
     }
 
     @IPVanillaCopy
     @Override
     public void flipUpdateTrackingSets() {
+        if (suppressTrackingSetConsumption) {
+            return;
+        }
         updatingSetsIndex = (updatingSetsIndex + 1) % 2;
         addedEmptySectionsSets[updatingSetsIndex].clear();
         removedEmptySectionsSets[updatingSetsIndex].clear();

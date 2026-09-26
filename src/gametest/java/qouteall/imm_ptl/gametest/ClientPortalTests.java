@@ -148,6 +148,36 @@ public class ClientPortalTests implements FabricClientGameTest {
             int loadingTicks = context.waitFor(mc -> mc.gui.screen() == null, 1200);
             check(loadingTicks < 400, "loading screen only closed after " + loadingTicks + " ticks");
             context.takeScreenshot("imm_ptl_03_back_in_overworld");
+            
+            // a portal into the same dimension: the view reuses the overworld's own renderer
+            singleplayer.getServer().runCommand("tp @a 0.5 " + surfaceY + " 6.5 180 0");
+            // straight ahead of the destination: an emerald wall; behind the destination point: red wool,
+            // which must be clipped away by the destination plane
+            singleplayer.getServer().runCommand("fill 16 " + surfaceY + " 26 25 " + (surfaceY + 6) + " 26 minecraft:emerald_block");
+            singleplayer.getServer().runCommand("fill 16 " + surfaceY + " 32 25 " + (surfaceY + 6) + " 32 minecraft:red_wool");
+            UUID sameDimensionPortalId = singleplayer.getServer().computeOnServer(server -> TestUtil.spawnPortal(
+                server.overworld(),
+                new Vec3(0.5, surfaceY + 1.5, 3.5),
+                Level.OVERWORLD,
+                new Vec3(20.5, surfaceY + 1.5, 30.5)
+            ).getUUID());
+            context.waitFor(mc -> findEntity(mc.level, sameDimensionPortalId) instanceof Portal, 200);
+            connection.waitForClientboundPackets();
+            context.waitFor(mc -> mc.levelRenderer.hasRenderedAllSections(), 600);
+            context.waitTicks(10);
+            context.takeScreenshot("imm_ptl_04_same_dimension_portal");
+            check(
+                // the nether portal behind it is in the frustum too (hidden by this portal's quad)
+                context.computeOnClient(mc -> PortalViewRenderer.getViewCountThisFrame() >= 1),
+                "the same-dimension portal view was not drawn"
+            );
+            // the main view must stay stable while its renderer is also used for the portal view
+            context.waitTicks(20);
+            context.takeScreenshot("imm_ptl_05_same_dimension_portal_later");
+            // turn to the side: the main view's visible sections must follow the main camera again
+            context.getInput().lookAt(90, 20);
+            context.waitTicks(20);
+            context.takeScreenshot("imm_ptl_06_looking_away");
         }
 
         // leaving the world disposes all client worlds

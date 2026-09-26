@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
 import qouteall.imm_ptl.core.IPGlobal;
+import qouteall.imm_ptl.core.chunk_loading.ImmPtlClientChunkMap;
 import qouteall.imm_ptl.core.mixin.client.portal_view.GameRendererAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelExtractorAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelRendererAccessor;
@@ -78,9 +79,8 @@ import java.util.UUID;
  * </ul>
  * Everything goes through the GPU abstraction, so it runs on OpenGL and Vulkan.
  * <p>
- * Limits of the prototype: one portal layer, at most {@link #MAX_VIEWS} views per frame, only portals
- * into another dimension (a same-dimension view would need a second renderer for the same level),
- * flat portals only.
+ * Limits of the prototype: one portal layer, at most {@link #MAX_VIEWS} views per frame, flat portals only.
+ * A same-dimension view reuses the level's renderer with a second camera in the same frame.
  */
 @Environment(EnvType.CLIENT)
 public final class PortalViewRenderer {
@@ -226,7 +226,6 @@ public final class PortalViewRenderer {
 
         result.removeIf(portal -> !portal.isPortalValid()
             || !portal.isVisible()
-            || portal.getDestDim() == level.dimension()
             || !portal.isRoughlyVisibleTo(cameraPos)
             || portal.getDistanceToNearestPointInPortal(cameraPos) > range
             || !frustum.isVisible(portal.getThinBoundingBox())
@@ -247,7 +246,16 @@ public final class PortalViewRenderer {
         LevelRenderState originalState = extractorAccess.ip_getLevelRenderState();
         extractorAccess.ip_setLevelRenderState(view.state);
         try {
-            ClientWorldLoader.withSwitchedWorld(destLevel, () -> extractor.extract(deltaTracker, view.camera, partialTicks));
+            if (destLevel == mainLevel) {
+                // same dimension: the main extractor already consumed this frame's chunk deltas
+                // for the main render state, which has not been drawn yet
+                ImmPtlClientChunkMap.withoutTrackingSetConsumption(
+                    () -> extractor.extract(deltaTracker, view.camera, partialTicks)
+                );
+            }
+            else {
+                ClientWorldLoader.withSwitchedWorld(destLevel, () -> extractor.extract(deltaTracker, view.camera, partialTicks));
+            }
         }
         finally {
             extractorAccess.ip_setLevelRenderState(originalState);
@@ -372,11 +380,17 @@ public final class PortalViewRenderer {
         LevelRenderState originalState = levelRendererAccess.ip_getLevelRenderState();
         levelRendererAccess.ip_setLevelRenderState(view.state);
         gameRendererAccess.ip_setMainRenderTarget(view.target);
+        Runnable render = () -> levelRenderer.render(
+            gameRendererAccess.ip_getResourcePool(), false, cameraState,
+            terrainFog, cameraState.fogData.color, true, false
+        );
         try {
-            ClientWorldLoader.withSwitchedWorld(destLevel, () -> levelRenderer.render(
-                gameRendererAccess.ip_getResourcePool(), false, cameraState,
-                terrainFog, cameraState.fogData.color, true, false
-            ));
+            if (destLevel == Minecraft.getInstance().level) {
+                render.run();
+            }
+            else {
+                ClientWorldLoader.withSwitchedWorld(destLevel, render);
+            }
         }
         finally {
             levelRendererAccess.ip_setLevelRenderState(originalState);
