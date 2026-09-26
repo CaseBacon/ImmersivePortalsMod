@@ -8,9 +8,6 @@ import net.minecraft.world.level.storage.WritableLevelData;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import qouteall.imm_ptl.core.ducks.IEWorld;
 
 @Mixin(Level.class)
@@ -42,16 +39,8 @@ public abstract class MixinLevel implements IEWorld {
     @Final
     private Thread thread;
     
-    // Fix overworld rain cause nether fog change
-    @Inject(method = "Lnet/minecraft/world/level/Level;prepareWeather()V", at = @At("TAIL"))
-    private void onInitWeatherGradients(CallbackInfo ci) {
-        if (dimension() == Level.NETHER) {
-            rainLevel = 0;
-            oRainLevel = 0;
-            thunderLevel = 0;
-            oThunderLevel = 0;
-        }
-    }
+    // The former "overworld rain causes nether fog change" fix is gone: since 26.x
+    // ServerLevel only prepares weather for levels that canHaveWeather() (not the nether).
     
     @Override
     public WritableLevelData ip_getLevelData() {

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "immersive_portals_gametest",
+  "name": "Immersive Portals Game Tests",
+  "version": "1.0.0",
+  "environment": "*",
+  "license": "Apache-2.0",
+  "entrypoints": {
+    "fabric-gametest": [
+      "qouteall.imm_ptl.gametest.ServerStartTests",
+      "qouteall.imm_ptl.gametest.PortalEntityTests",
+      "qouteall.imm_ptl.gametest.TeleportRequestTests"
+    ]
+  },
+  "mixins": [
+    "immersive_portals_gametest.mixins.json"
+  ],
+  "depends": {
+    "immersive_portals": "*",
+    "fabric-gametest-api-v1": "*"
+  }
+}

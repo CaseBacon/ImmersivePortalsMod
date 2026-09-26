@@ -96,8 +96,9 @@ public abstract class MixinMinecraft implements IEMinecraftClient {
         Profiler.get().pop();
     }
     
+    // the once-per-second fps update moved from runTick to renderFrame
     @Inject(
-        method = "runTick(Z)V",
+        method = "renderFrame(Z)V",
         at = @At(
             value = "FIELD",
             target = "Lnet/minecraft/client/Minecraft;fps:I",

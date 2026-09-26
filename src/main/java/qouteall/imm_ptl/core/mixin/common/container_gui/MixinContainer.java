@@ -21,12 +21,12 @@ public interface MixinContainer {
         method = "stillValidBlockEntity(Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/entity/player/Player;F)Z",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/player/Player;canInteractWithBlock(Lnet/minecraft/core/BlockPos;D)Z"
+            target = "Lnet/minecraft/world/entity/player/Player;isWithinBlockInteractionRange(Lnet/minecraft/core/BlockPos;D)Z"
         )
     )
     private static boolean wrapCanInteractWithBlock(
         Player player, BlockPos blockPos, double distance, Operation<Boolean> operation,
-        @Local BlockEntity blockEntity
+        @Local(argsOnly = true) BlockEntity blockEntity
     ) {
         Boolean originalResult = operation.call(player, blockPos, distance);
         

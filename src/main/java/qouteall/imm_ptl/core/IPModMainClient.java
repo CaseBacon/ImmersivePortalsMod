@@ -1,5 +1,8 @@
 package qouteall.imm_ptl.core;
 
+import qouteall.imm_ptl.core.render.context_management.RenderStates;
+import net.minecraft.resources.Identifier;
+import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import qouteall.imm_ptl.core.network.ImmPtlRemoteCalls;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
@@ -102,6 +105,22 @@ public class IPModMainClient {
         });
         
         DimensionIntId.initClient();
+        
+        // F3 text. Since 26.x the debug screen consists of registered entries
+        // (can be toggled in the debug options screen).
+        DebugScreenEntries.register(
+            Identifier.fromNamespaceAndPath("immersive_portals", "debug"),
+            (displayer, level, clientChunk, serverChunk) -> {
+                for (String line : RenderStates.collectDebugText()) {
+                    if (IPGlobal.moveDebugTextToTop) {
+                        displayer.addPriorityLine(line);
+                    }
+                    else {
+                        displayer.addLine(line);
+                    }
+                }
+            }
+        );
     }
     
 }

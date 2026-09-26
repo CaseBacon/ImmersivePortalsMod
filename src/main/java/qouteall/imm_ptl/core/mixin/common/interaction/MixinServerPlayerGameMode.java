@@ -11,7 +11,6 @@ import net.minecraft.server.level.ServerPlayerGameMode;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Final;
@@ -79,10 +78,10 @@ public class MixinServerPlayerGameMode {
         },
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/server/level/ServerPlayer;level()Lnet/minecraft/world/level/Level;"
+            target = "Lnet/minecraft/server/level/ServerPlayer;level()Lnet/minecraft/server/level/ServerLevel;"
         )
     )
-    private Level redirectGetLevel(ServerPlayer instance) {
+    private ServerLevel redirectGetLevel(ServerPlayer instance) {
         return ip_getActualWorld();
     }
     
@@ -108,7 +107,7 @@ public class MixinServerPlayerGameMode {
         method = "handleBlockBreakAction",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/server/level/ServerPlayer;canInteractWithBlock(Lnet/minecraft/core/BlockPos;D)Z"
+            target = "Lnet/minecraft/server/level/ServerPlayer;isWithinBlockInteractionRange(Lnet/minecraft/core/BlockPos;D)Z"
         )
     )
     private boolean wrapDistanceInHandleBlockBreakAction(

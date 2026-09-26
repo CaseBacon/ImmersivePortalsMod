@@ -30,7 +30,6 @@ import qouteall.imm_ptl.core.api.PortalAPI;
 import qouteall.imm_ptl.core.collision.CollisionHelper;
 import qouteall.imm_ptl.core.collision.PortalCollisionHandler;
 import qouteall.imm_ptl.core.compat.GravityChangerInterface;
-import qouteall.imm_ptl.core.ducks.IEAbstractClientPlayer;
 import qouteall.imm_ptl.core.ducks.IEClientPlayNetworkHandler;
 import qouteall.imm_ptl.core.ducks.IEEntity;
 import qouteall.imm_ptl.core.ducks.IEMinecraftClient;
@@ -522,8 +521,8 @@ public class ClientTeleportationManager {
         
         ((IEEntity) player).ip_unsetRemoved();
         
+        // since 26.x the client player has no separate clientLevel field; ip_setWorld above is enough
         toWorld.addEntity(player);
-        ((IEAbstractClientPlayer) player).ip_setClientLevel(toWorld);
         
         // the lightmap is owned by GameRenderer and follows the extracted level
         client.level = toWorld;
