@@ -19,6 +19,7 @@ import qouteall.imm_ptl.core.network.ImmPtlNetworking;
 import qouteall.imm_ptl.core.platform_specific.IPConfig;
 import qouteall.imm_ptl.core.platform_specific.O_O;
 import qouteall.imm_ptl.core.portal.PortalRenderInfo;
+import qouteall.imm_ptl.core.portal_view.PortalViewRenderer;
 import qouteall.imm_ptl.core.portal.animation.ClientPortalAnimationManagement;
 import qouteall.imm_ptl.core.portal.animation.StableClientTimer;
 import qouteall.imm_ptl.core.teleportation.ClientTeleportationManager;
@@ -72,6 +73,9 @@ public class IPModMainClient {
         // CloudContext, SharedBlockMeshBuffers, VisibleSectionDiscovery, ImmPtlViewArea,
         // GuiPortalRendering, ForceMainThreadRebuild) is quarantined until the renderer phase.
         // IPCGlobal.renderer stays on the dummy renderer.
+        
+        // portal rendering prototype on the 26.x renderer (see PortalViewRenderer)
+        PortalViewRenderer.init();
         
         DubiousThings.init();
         

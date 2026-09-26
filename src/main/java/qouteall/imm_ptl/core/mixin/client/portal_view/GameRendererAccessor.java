@@ -1,0 +1,22 @@
+package qouteall.imm_ptl.core.mixin.client.portal_view;
+
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.resource.CrossFrameResourcePool;
+import net.minecraft.client.renderer.GameRenderer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Mutable;
+import org.spongepowered.asm.mixin.gen.Accessor;
+
+@Mixin(GameRenderer.class)
+public interface GameRendererAccessor {
+    @Accessor("resourcePool")
+    CrossFrameResourcePool ip_getResourcePool();
+    
+    // the level renderer draws into GameRenderer.mainRenderTarget(); a portal view swaps it temporarily
+    @Accessor("mainRenderTarget")
+    RenderTarget ip_getMainRenderTarget();
+    
+    @Mutable
+    @Accessor("mainRenderTarget")
+    void ip_setMainRenderTarget(RenderTarget target);
+}

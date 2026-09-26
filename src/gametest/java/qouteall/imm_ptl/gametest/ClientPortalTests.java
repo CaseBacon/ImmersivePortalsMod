@@ -15,6 +15,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.portal.Portal;
+import qouteall.imm_ptl.core.portal_view.PortalViewRenderer;
 
 import java.util.UUID;
 
@@ -24,8 +25,8 @@ import java.util.UUID;
  * walking through the portal changes the client and server dimension seamlessly,
  * and a vanilla cross-dimension teleport works with several client worlds.
  * <p>
- * Portal rendering is not ported yet (RendererDummy), so the screenshots only show the
- * current dimension. They are saved in the run directory for manual review.
+ * The first screenshot shows the nether room through the portal (PortalViewRenderer prototype).
+ * Screenshots are saved in the run directory for manual review.
  */
 public class ClientPortalTests implements FabricClientGameTest {
 
@@ -53,6 +54,9 @@ public class ClientPortalTests implements FabricClientGameTest {
             singleplayer.getServer().runCommand("execute in minecraft:the_nether run forceload add 0 0");
             singleplayer.getServer().runCommand("execute in minecraft:the_nether run fill -3 99 -3 3 105 3 minecraft:obsidian");
             singleplayer.getServer().runCommand("execute in minecraft:the_nether run fill -2 100 -2 2 104 2 minecraft:air");
+            // recognizable content for the portal view: a lit floor and a gold wall straight ahead (north)
+            singleplayer.getServer().runCommand("execute in minecraft:the_nether run fill -2 99 -2 2 99 2 minecraft:glowstone");
+            singleplayer.getServer().runCommand("execute in minecraft:the_nether run fill -3 99 -3 3 105 -3 minecraft:gold_block");
 
             // stand at (0.5, surface, 0.5) looking north (-Z)
             singleplayer.getServer().runCommand("tp @a 0.5 " + surfaceY + " 0.5 180 0");
@@ -75,7 +79,43 @@ public class ClientPortalTests implements FabricClientGameTest {
                 ClientLevel nether = findClientWorld(Level.NETHER);
                 return nether != null && nether.getChunkSource().getLoadedChunksCount() > 0;
             }, 600);
+            // sections are only compiled when all neighbouring chunks are there; wait for 5x5 chunks around the destination
+            context.waitFor(mc -> {
+                ClientLevel nether = findClientWorld(Level.NETHER);
+                for (int x = -2; x <= 2; x++) {
+                    for (int z = -2; z <= 2; z++) {
+                        if (nether.getChunkSource().getChunk(x, z, false) == null) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }, 1200);
+            // the portal view is drawn by the nether's own level renderer; wait until its sections are compiled
+            int netherRenderTicks = context.waitFor(
+                mc -> ClientWorldLoader.getWorldRenderer(Level.NETHER).hasRenderedAllSections(), 600
+            );
+            context.waitTicks(5);
+            context.runOnClient(mc -> {
+                ClientLevel nether = findClientWorld(Level.NETHER);
+                StringBuilder chunks = new StringBuilder();
+                for (int x = -2; x <= 1; x++) {
+                    for (int z = -2; z <= 1; z++) {
+                        chunks.append("(%d,%d)=%s ".formatted(x, z, nether.getChunkSource().getChunk(x, z, false) != null));
+                    }
+                }
+                System.out.println("[imm_ptl test] nether client chunks: " + nether.getChunkSource().getLoadedChunksCount()
+                    + " render ticks " + netherRenderTicks + " around origin: " + chunks);
+            });
             context.takeScreenshot("imm_ptl_01_portal_in_overworld");
+            check(
+                context.computeOnClient(mc -> PortalViewRenderer.getViewCountThisFrame() == 1),
+                "the portal view was not drawn"
+            );
+            context.runOnClient(mc -> PortalViewRenderer.debugDumpNextView(
+                mc.gameDirectory.toPath().resolve("screenshots").resolve("imm_ptl_01b_portal_view_target.png")
+            ));
+            context.waitTicks(3);
             check(
                 context.computeOnClient(mc -> mc.level.dimension() == Level.OVERWORLD),
                 "loading the nether client world must not change the current client world"

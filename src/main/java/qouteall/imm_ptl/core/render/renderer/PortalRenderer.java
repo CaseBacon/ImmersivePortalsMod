@@ -324,7 +324,11 @@ public abstract class PortalRenderer {
         // the dummy renderer, which does not render portal content.
         if (!notPortedWarned && IPGlobal.renderMode != IPGlobal.RenderMode.none) {
             notPortedWarned = true;
-            LOGGER.warn("Portal rendering is not ported to Minecraft 26.3 yet. Portals will not show their destination.");
+            LOGGER.warn(
+                "The stencil and framebuffer portal renderers are not ported to Minecraft 26.3. "
+                    + "Portals into other dimensions are drawn by the PortalViewRenderer prototype "
+                    + "(one layer, no same-dimension portals)."
+            );
         }
         switchRenderer(IPCGlobal.rendererDummy);
     }
