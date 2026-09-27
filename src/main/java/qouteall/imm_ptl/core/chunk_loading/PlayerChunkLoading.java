@@ -60,7 +60,8 @@ public class PlayerChunkLoading {
     // but if this is true, it will immediately update next tick
     public boolean shouldUpdateImmediately = false;
     
-    public PerformanceLevel performanceLevel = PerformanceLevel.bad;
+    // until the client reports its level (right after joining); "bad" would load only 2 chunks around portals
+    public PerformanceLevel performanceLevel = PerformanceLevel.medium;
     
     /**
      * Do similar functionality as {@link PlayerChunkSender},

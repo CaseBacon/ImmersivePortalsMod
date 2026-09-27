@@ -6,14 +6,21 @@ import net.minecraft.server.ServerTickRateManager;
 public enum PerformanceLevel {
     good, medium, bad;
     
-    public static PerformanceLevel getClientPerformanceLevel(
-        int averageFPS,
-        int averageFreeMemoryMB
-    ) {
-        if (averageFPS > 50 && averageFreeMemoryMB > 800) {
+    /**
+     * The level a client reports to the server, which caps how far the server loads chunks through portals for it
+     * ({@link #getIndirectLoadingRadiusCap}, {@link #getVisiblePortalRangeChunks}).
+     * <p>
+     * PORT(26.3): this used to depend on the frame rate as well (good above 50 FPS, bad at 30 FPS or below), so the
+     * chunk loading radius through a portal dropped to 2 chunks at typical shader pack frame rates and with a
+     * 30 FPS limit. Chunks loaded through a portal cost the client memory (chunk data and meshes, built on worker
+     * threads); they cost no frame time unless they are visible, and then they are what the player expects to see.
+     * So only the free memory counts.
+     */
+    public static PerformanceLevel getClientPerformanceLevel(int averageFreeMemoryMB) {
+        if (averageFreeMemoryMB > 800) {
             return good;
         }
-        else if (averageFPS > 30 && averageFreeMemoryMB > 300) {
+        else if (averageFreeMemoryMB > 300) {
             return medium;
         }
         else {

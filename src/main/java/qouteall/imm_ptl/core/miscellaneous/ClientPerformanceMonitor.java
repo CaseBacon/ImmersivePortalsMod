@@ -7,6 +7,7 @@ import net.minecraft.client.player.LocalPlayer;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.chunk_loading.PerformanceLevel;
 import qouteall.imm_ptl.core.commands.PortalDebugCommands;
+import org.jspecify.annotations.Nullable;
 import qouteall.q_misc_util.api.McRemoteProcedureCall;
 
 import java.util.ArrayDeque;
@@ -33,6 +34,7 @@ public class ClientPerformanceMonitor {
     private static final int sampleNum = 20;
     
     private static int counter = 0;
+    private static @Nullable LocalPlayer reportedPlayer = null;
     
     public static void updateEverySecond(int newFps) {
         if (Minecraft.getInstance().player == null) {
@@ -59,7 +61,8 @@ public class ClientPerformanceMonitor {
             .mapToInt(r -> r.freeMemoryMB).average().orElse(1000);
         
         counter++;
-        if (counter % 5 == 0) {
+        // report right after joining (the server assumes a medium level until then), then every 5 seconds
+        if (counter % 5 == 0 || Minecraft.getInstance().player != reportedPlayer) {
             updateAndSend();
         }
     }
@@ -86,9 +89,10 @@ public class ClientPerformanceMonitor {
             level = PerformanceLevel.good;
         }
         else {
-            level = PerformanceLevel.getClientPerformanceLevel(averageFps, averageFreeMemoryMB);
+            level = PerformanceLevel.getClientPerformanceLevel(averageFreeMemoryMB);
         }
         
+        reportedPlayer = player;
         McRemoteProcedureCall.tellServerToInvoke(
             "qouteall.imm_ptl.core.chunk_loading.ImmPtlChunkTracking.RemoteCallables.acceptClientPerformanceInfo",
             level
