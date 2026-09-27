@@ -29,6 +29,8 @@ import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.GlobalSettingsUniform;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.Lightmap;
+import net.minecraft.client.renderer.LightmapRenderStateExtractor;
 import net.minecraft.client.renderer.ProjectionMatrixBuffer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -36,6 +38,7 @@ import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import net.minecraft.client.renderer.state.GameRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.client.renderer.state.LightmapRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -52,6 +55,7 @@ import qouteall.imm_ptl.core.ClientWorldLoader;
 import qouteall.imm_ptl.core.IPCGlobal;
 import qouteall.imm_ptl.core.IPGlobal;
 import qouteall.imm_ptl.core.chunk_loading.ImmPtlClientChunkMap;
+import qouteall.imm_ptl.core.compat.iris_compatibility.IrisInterface;
 import qouteall.imm_ptl.core.compat.sodium_compatibility.SodiumInterface;
 import qouteall.imm_ptl.core.mixin.client.portal_view.GameRendererAccessor;
 import qouteall.imm_ptl.core.mixin.client.portal_view.LevelExtractorAccessor;
@@ -133,6 +137,15 @@ public final class PortalViewRenderer {
 
     private static final class View implements AutoCloseable {
         final LevelRenderState state = new LevelRenderState();
+        // the lightmap of the destination, from the view camera's environment attributes
+        final Lightmap lightmap = new Lightmap();
+        final LightmapRenderState lightmapState = new LightmapRenderState();
+        final LightmapRenderStateExtractor lightmapExtractor = new LightmapRenderStateExtractor(
+            Minecraft.getInstance().gameRenderer, Minecraft.getInstance()
+        );
+        long lastLightmapTick = Long.MIN_VALUE;
+        // with a shader pack: the clip plane for its G-buffer programs (the projection is not oblique then)
+        @Nullable Vector4f shaderClipCoefficients;
         final PortalViewCamera camera = new PortalViewCamera();
         final FogRenderer fogRenderer = new FogRenderer();
         final ProjectionMatrixBuffer projectionBuffer = new ProjectionMatrixBuffer("immersive_portals portal view");
@@ -168,6 +181,7 @@ public final class PortalViewRenderer {
 
         @Override
         public void close() {
+            lightmap.close();
             fogRenderer.close();
             projectionBuffer.close();
             globals.close();
@@ -311,11 +325,43 @@ public final class PortalViewRenderer {
         cameraState.smartCull = false;
 
         // clip the destination world between the camera and the destination plane
-        ObliqueClipping.apply(
-            cameraState.projectionMatrix,
-            destinationPlaneInViewSpace(portal, cameraState),
-            RenderSystem.getDevice().getDeviceInfo().isZZeroToOne()
-        );
+        Vector4f clipPlane = destinationPlaneInViewSpace(portal, cameraState);
+        if (IrisInterface.invoker.isShaders()) {
+            // Shader packs derive distances from depth assuming a standard perspective projection, so the view
+            // keeps it and the pack's G-buffer programs discard what is behind the plane (ShaderClipPlane).
+            view.shaderClipCoefficients = ShaderClipPlane.clipSpaceCoefficients(cameraState.projectionMatrix, clipPlane);
+        }
+        else {
+            view.shaderClipCoefficients = null;
+            ObliqueClipping.apply(
+                cameraState.projectionMatrix, clipPlane, RenderSystem.getDevice().getDeviceInfo().isZZeroToOne()
+            );
+        }
+
+        // like GameRenderer.extract: the lightmap state, which reads the (main) camera's environment attributes;
+        // vanilla's extractor updates it once per client tick
+        long tick = mainLevel.getGameTime();
+        if (tick != view.lastLightmapTick) {
+            view.lastLightmapTick = tick;
+            view.lightmapExtractor.tick();
+        }
+        Runnable extractLightmap = () -> {
+            GameRendererAccessor access = (GameRendererAccessor) mc.gameRenderer;
+            Camera originalMainCamera = access.ip_getMainCamera();
+            access.ip_setMainCamera(view.camera);
+            try {
+                view.lightmapExtractor.extract(view.lightmapState, 1.0F);
+            }
+            finally {
+                access.ip_setMainCamera(originalMainCamera);
+            }
+        };
+        if (destLevel == mainLevel) {
+            extractLightmap.run();
+        }
+        else {
+            ClientWorldLoader.withSwitchedWorld(destLevel, extractLightmap);
+        }
 
         LevelExtractor extractor = ClientWorldLoader.getLevelExtractor(destLevel.dimension());
         LevelExtractorAccessor extractorAccess = (LevelExtractorAccessor) extractor;
@@ -456,11 +502,17 @@ public final class PortalViewRenderer {
         // GameRenderer.mainCamera(); vanilla does not read it while drawing a level
         Camera mainCamera = gameRendererAccess.ip_getMainCamera();
         gameRendererAccess.ip_setMainCamera(view.camera);
+        view.lightmap.render(view.lightmapState);
+        Lightmap mainLightmap = gameRendererAccess.ip_getLightmap();
+        gameRendererAccess.ip_setLightmap(view.lightmap);
         Runnable render = () -> levelRenderer.render(
             gameRendererAccess.ip_getResourcePool(), false, cameraState,
             terrainFog, cameraState.fogData.color, true, false
         );
         Matrix4f previousTerrainProjection = SodiumInterface.invoker.swapTerrainProjection(cameraState.projectionMatrix);
+        if (view.shaderClipCoefficients != null) {
+            IrisInterface.invoker.setShaderClipping(view.shaderClipCoefficients);
+        }
         try {
             if (destLevel == Minecraft.getInstance().level) {
                 render.run();
@@ -471,10 +523,14 @@ public final class PortalViewRenderer {
         }
         finally {
             gameRendererAccess.ip_setMainCamera(mainCamera);
+            gameRendererAccess.ip_setLightmap(mainLightmap);
             levelRendererAccess.ip_setLevelRenderState(originalState);
             view.fogRenderer.endFrame();
             if (previousTerrainProjection != null) {
                 SodiumInterface.invoker.swapTerrainProjection(previousTerrainProjection);
+            }
+            if (view.shaderClipCoefficients != null) {
+                IrisInterface.invoker.setShaderClipping(null);
             }
         }
         

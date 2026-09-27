@@ -4,6 +4,7 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.resource.CrossFrameResourcePool;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.Lightmap;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -29,6 +30,15 @@ public interface GameRendererAccessor {
     @Mutable
     @Accessor("mainCamera")
     void ip_setMainCamera(Camera camera);
+
+    // everything that draws a level samples GameRenderer.lightmap(); a portal view swaps in the lightmap of its
+    // destination (dimension ambient light, sky light factor and colour)
+    @Accessor("lightmap")
+    Lightmap ip_getLightmap();
+
+    @Mutable
+    @Accessor("lightmap")
+    void ip_setLightmap(Lightmap lightmap);
 
     // Sodium sets up the terrain with the fog of GameRenderer.fogRenderer; a portal view swaps in its own
     @Accessor("fogRenderer")

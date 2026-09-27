@@ -45,7 +45,8 @@
     "imm_ptl_peripheral.mixins.json",
     "imm_ptl.mixins.json",
     "imm_ptl_fabric.mixins.json",
-    "q_misc_util.mixins.json"
+    "q_misc_util.mixins.json",
+    "imm_ptl_iris.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.19.5",
@@ -62,7 +63,7 @@
     "canvas": "*",
     "cardboard": "*",
     "iris": ["<1.11.6", ">1.11.6"],
-    "sodium": ["<0.9.2", ">0.9.2"],
+    "sodium": ["<0.9.2", ">0.9.2 <0.9.3-alpha.1", ">0.9.3-alpha.1"],
     "gravity_api": "*",
     "vmp": "*"
   },

@@ -2,6 +2,7 @@ package qouteall.imm_ptl.core.compat.iris_compatibility;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import org.joml.Vector4fc;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -33,6 +34,14 @@ public class IrisInterface {
 
         public @Nullable String getShaderpackName() {
             return null;
+        }
+        
+        /**
+         * Sets the portal view clipping of the shader pack's G-buffer programs ({@code ShaderClipPlane}), or
+         * disables it with null. Only meaningful while {@link #isShaders()}.
+         */
+        public void setShaderClipping(@Nullable Vector4fc coefficients) {
+        
         }
     }
 
