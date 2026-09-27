@@ -209,7 +209,7 @@ public class IrisShaderPackTests implements FabricClientGameTest {
     /**
      * Only loaded when Iris is present.
      */
-    private static final class IrisControl {
+    static final class IrisControl {
         static String writeMinimalPack() {
             try {
                 Path shaders = Iris.getShaderpacksDirectory().resolve(MINIMAL_PACK).resolve("shaders");

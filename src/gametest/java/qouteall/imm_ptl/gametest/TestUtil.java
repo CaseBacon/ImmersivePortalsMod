@@ -43,6 +43,15 @@ final class TestUtil {
     static Portal spawnPortal(
         ServerLevel level, Vec3 origin, ResourceKey<Level> destDim, Vec3 destination
     ) {
+        return spawnPortal(level, origin, destDim, destination, 2, 3);
+    }
+
+    /**
+     * A portal in the XY plane, facing +Z.
+     */
+    static Portal spawnPortal(
+        ServerLevel level, Vec3 origin, ResourceKey<Level> destDim, Vec3 destination, double width, double height
+    ) {
         Portal portal = Portal.ENTITY_TYPE.create(level, EntitySpawnReason.LOAD);
         if (portal == null) {
             throw new IllegalStateException("could not create portal entity");
@@ -50,7 +59,7 @@ final class TestUtil {
         portal.setOriginPos(origin);
         portal.setDestinationDimension(destDim);
         portal.setDestination(destination);
-        portal.setOrientationAndSize(new Vec3(1, 0, 0), new Vec3(0, 1, 0), 2, 3);
+        portal.setOrientationAndSize(new Vec3(1, 0, 0), new Vec3(0, 1, 0), width, height);
         if (!level.addFreshEntity(portal)) {
             throw new IllegalStateException("could not add portal entity");
         }
