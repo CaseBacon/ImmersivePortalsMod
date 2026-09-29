@@ -1,4 +1,4 @@
-Update: this repo is not being maintained now. Forks are welcomed.
+Update: this repo is a fork, not everything will work correctly
 
 # Immersive Portals Mod
 
